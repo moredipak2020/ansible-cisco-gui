@@ -1,0 +1,101 @@
+---
+- name: Configure SVI 10 and HSRP on Nexus Switches
+  hosts: nexus
+  gather_facts: no
+
+  tasks:
+    - name: 1. Enable Required Features (SVI and HSRP)
+      cisco.nxos.nxos_config:
+        lines:
+          - feature interface-vlan
+          - feature hsrp
+
+    - name: 2. Create Layer 2 VLAN 10
+      cisco.nxos.nxos_config:
+        parents: vlan 10
+        lines:
+          - name DATA
+
+    - name: 3. Configure SVI 10 on N9K-1
+      when: inventory_hostname == 'N9K-1'
+      cisco.nxos.nxos_config:
+        parents: interface vlan 10
+        lines:
+          - ip address 10.10.10.252/24
+          - no shutdown
+
+    - name: 4. Configure HSRP on N9K-1 (Active Router)
+      when: inventory_hostname == 'N9K-1'
+      cisco.nxos.nxos_config:
+        parents: 
+          - interface vlan 10
+          - hsrp 10
+        lines:
+          - ip 10.10.10.254
+          - priority 150
+          - preempt
+
+    - name: 5. Configure SVI 10 on N9K-2
+      when: inventory_hostname == 'N9K-2'
+      cisco.nxos.nxos_config:
+        parents: interface vlan 10
+        lines:
+          - ip address 10.10.10.253/24
+          - no shutdown
+
+    - name: 6. Configure HSRP on N9K-2 (Standby Router)
+      when: inventory_hostname == 'N9K-2'
+      cisco.nxos.nxos_config:
+        parents: 
+          - interface vlan 10
+          - hsrp 10
+        lines:
+          - ip 10.10.10.254
+          - priority 120
+
+    - name: 7. Create Layer 2 VLAN 20
+      cisco.nxos.nxos_config:
+        parents: vlan 20
+        lines:
+          - name voice
+
+    - name: 8. Configure SVI 20 on N9K-1
+      when: inventory_hostname == 'N9K-1'
+      cisco.nxos.nxos_config:
+        parents: interface vlan 20
+        lines:
+          - ip address 10.10.20.252/24
+          - no shutdown
+
+    - name: 9. Configure HSRP on N9K-1 (Active Router)
+      when: inventory_hostname == 'N9K-1'
+      cisco.nxos.nxos_config:
+        parents: 
+          - interface vlan 20
+          - hsrp 20
+        lines:
+          - ip 10.10.20.254
+          - priority 150
+          - preempt
+
+    - name: 10. Configure SVI 20 on N9K-2
+      when: inventory_hostname == 'N9K-2'
+      cisco.nxos.nxos_config:
+        parents: interface vlan 20
+        lines:
+          - ip address 10.10.20.253/24
+          - no shutdown
+
+    - name: 11. Configure HSRP on N9K-2 (Standby Router)
+      when: inventory_hostname == 'N9K-2'
+      cisco.nxos.nxos_config:
+        parents: 
+          - interface vlan 20
+          - hsrp 20
+        lines:
+          - ip 10.10.20.254
+          - priority 120
+
+    - name: 12. Save the configuration
+      cisco.nxos.nxos_config:
+        save_when: modified

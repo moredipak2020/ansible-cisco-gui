@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FabricOrchestra: Datacenter Automation Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- OVERLAY FOR SETTINGS DRAWER -->
+  <div class="drawer-overlay" id="drawerOverlay"></div>
+
+  <!-- GLOBAL SYSTEM SETTINGS DRAWER (Slide-Out Panel) -->
+  <div class="settings-drawer" id="settingsDrawer">
+    <div class="drawer-header">
+      <div class="flex-align">
+        <span class="drawer-icon">⚙️</span>
+        <h2>System Orchestration Settings</h2>
+      </div>
+      <button type="button" class="drawer-close-btn" id="btnCloseDrawer" title="Close Panel">✕</button>
+    </div>
+    <p class="drawer-subtitle">Configure backend automation nodes and SSH switch access parameters.</p>
+    
+    <div class="drawer-body">
+      <!-- 1. Ansible Server Settings Container -->
+      <div class="card drawer-card">
+        <div class="card-header">
+          <div class="card-icon">🚀</div>
+          <h2>Ansible Engine Node</h2>
+        </div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group col-12">
+              <label for="ansibleTarget">Ansible Engine Location</label>
+              <select id="ansibleTarget" class="custom-select">
+                <option value="local">Local Host (Run locally in backend)</option>
+                <option value="remote">Remote Ansible Controller (Secure SSH)</option>
+              </select>
+            </div>
+          </div>
+          
+          <div id="remoteAnsibleContainer" class="remote-form-wrap mt-3" style="display: none;">
+            <div class="form-row">
+              <div class="form-group col-8">
+                <label for="ansibleHost">Controller IP</label>
+                <input type="text" id="ansibleHost" placeholder="e.g. 192.168.1.5" autocomplete="off">
+              </div>
+              <div class="form-group col-4">
+                <label for="ansiblePort">SSH Port</label>
+                <input type="number" id="ansiblePort" value="22" min="1" max="65535">
+              </div>
+            </div>
+            <div class="form-row mt-2">
+              <div class="form-group col-6">
+                <label for="ansibleUser">SSH User</label>
+                <input type="text" id="ansibleUser" placeholder="e.g. admin" autocomplete="off">
+              </div>
+              <div class="form-group col-6">
+                <label for="ansiblePass">SSH Password</label>
+                <input type="password" id="ansiblePass" placeholder="••••••••">
+              </div>
+            </div>
+            <div class="form-row mt-2">
+              <div class="form-group col-12">
+                <label for="ansibleWorkDir">Temp Workspace Directory</label>
+                <input type="text" id="ansibleWorkDir" value="/tmp/fabric_orchestra_exec" placeholder="/tmp/fabric_orchestra_exec" autocomplete="off">
+                <span class="input-info">Temp directory where playbooks will be copied.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Switch SSH Credentials -->
+      <div class="card drawer-card mt-4">
+        <div class="card-header">
+          <div class="card-icon">🔑</div>
+          <h2>Global Switch SSH Credentials</h2>
+        </div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group col-12">
+              <label for="username">Switch Username</label>
+              <input type="text" id="username" value="admin" autocomplete="off">
+            </div>
+          </div>
+          <div class="form-row mt-2">
+            <div class="form-group col-12">
+              <label for="password">Switch Password</label>
+              <input type="password" id="password" value="admin">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo-area">
+      <div class="logo-orb"></div>
+      <div class="title-wrap">
+        <h1>FabricOrchestra</h1>
+        <p class="subtitle">Enterprise Datacenter Provisioning Engine</p>
+      </div>
+    </div>
+
+    <!-- MAIN NAVIGATION TABS -->
+    <nav class="main-nav">
+      <button type="button" class="nav-tab active" data-tab="settings-tab">🖥️ Switch Inventory</button>
+      <button type="button" class="nav-tab" data-tab="vpc-tab">🌐 vPC Configurations</button>
+      <button type="button" class="nav-tab" data-tab="hsrp-tab">⚡ HSRP Interface Gateway</button>
+      <button type="button" class="nav-tab" data-tab="ds-pc-tab">🔌 Downstream Port-Channels</button>
+      <button type="button" class="nav-tab" data-tab="ds-svi-tab">🌐 Downstream SVIs</button>
+      <button type="button" class="nav-tab" data-tab="deploy-tab">🚀 Verify and Push</button>
+    </nav>
+
+    <div class="top-controls">
+      <div class="mode-toggle-group">
+        <label for="simulationMode" class="toggle-label">
+          <span class="label-text">Ansible Simulator</span>
+          <input type="checkbox" id="simulationMode" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="connection-status">
+        <span class="status-indicator online" id="globalStatusIndicator"></span>
+        <span class="status-text" id="globalStatusText">SYSTEM ACTIVE</span>
+      </div>
+      <!-- NEW GLOBAL GEAR ICON -->
+      <button type="button" class="btn-gear" id="btnOpenSettings" title="Orchestration Settings">⚙️</button>
+    </div>
+  </header>
+
+  <!-- MAIN LAYOUT -->
+  <main class="dashboard-container">
+      
+      <!-- TAB 1: SWITCH INVENTORY & SETTINGS -->
+      <div id="settings-tab" class="tab-content active">
+        <!-- Switch Nodes Grid -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon">🖥️</div>
+            <h2>Datacenter Switch Inventory</h2>
+          </div>
+          <div class="card-body">
+            <div class="switch-grid" id="switchGrid">
+              <!-- Switch cards dynamically rendered here -->
+            </div>
+            
+            <div class="divider"></div>
+            
+            <h3 class="section-title">Add Switch Node</h3>
+            <div class="form-row mt-2">
+              <div class="form-group col-4">
+                <label for="nodeName">Switch Hostname</label>
+                <input type="text" id="nodeName" placeholder="e.g. N9K-1" autocomplete="off">
+              </div>
+              <div class="form-group col-4">
+                <label for="nodeIp">Management IP Address</label>
+                <input type="text" id="nodeIp" placeholder="e.g. 192.168.1.13" autocomplete="off">
+              </div>
+              <div class="form-group col-4">
+                <label for="nodeRole">Device Role</label>
+                <select id="nodeRole" class="custom-select">
+                  <option value="leaf-primary">Leaf (Primary)</option>
+                  <option value="leaf-secondary">Leaf (Secondary)</option>
+                  <option value="spine">Spine Switch</option>
+                  <option value="downstream">Downstream Switch/Device</option>
+                </select>
+              </div>
+            </div>
+            <div class="flex-end mt-3">
+              <button type="button" id="btnAddNode" class="btn btn-secondary">+ Add Switch to Directory</button>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: vPC CONFIGURATIONS -->
+      <div id="vpc-tab" class="tab-content">
+        <div class="space-between align-center mb-4">
+          <h2 class="section-title" style="margin: 0;">🌐 Datacenter vPC Domain Registry</h2>
+          <button type="button" id="btnCreateVpcDomain" class="btn btn-secondary">+ Create Domain Pair</button>
+        </div>
+        <div id="vpcDomainsContainer">
+          <!-- Dynamic Domain Cards render here -->
+        </div>
+      </div>
+
+      <!-- TAB 3: HSRP INTERFACE SETTINGS -->
+      <div id="hsrp-tab" class="tab-content">
+        <!-- Define HSRP VLAN Gateway Interface -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon">⚡</div>
+            <h2>Define HSRP VLAN Gateway Interface</h2>
+          </div>
+          <div class="card-body">
+            <div class="vlan-form-entry">
+              <div class="form-row inline-form">
+                <div class="form-group col-2">
+                  <label for="vlanId">VLAN ID</label>
+                  <input type="number" id="vlanId" placeholder="10" min="1" max="4094">
+                </div>
+                <div class="form-group col-2">
+                  <label for="vlanName">Name</label>
+                  <input type="text" id="vlanName" placeholder="DATA" autocomplete="off">
+                </div>
+                <div class="form-group col-3">
+                  <label for="vlanVip">VIP (Gateway)</label>
+                  <input type="text" id="vlanVip" placeholder="10.10.10.254" autocomplete="off">
+                </div>
+                <div class="form-group col-2">
+                  <label for="vlanMask">Mask (CIDR)</label>
+                  <input type="number" id="vlanMask" placeholder="24" min="1" max="32">
+                </div>
+                <div class="form-group col-3">
+                  <label for="vlanHostType">Gateway Hosting</label>
+                  <select id="vlanHostType" class="custom-select">
+                    <option value="vpc">vPC Domain Pair</option>
+                    <option value="standalone">Standalone Switches</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- vPC Dynamic Row -->
+              <div class="form-row inline-form mt-3" id="vlanHostVpcRow">
+                <div class="form-group col-6">
+                  <label for="vlanVpcDomainSelect">Select host vPC Domain Pair</label>
+                  <select id="vlanVpcDomainSelect" class="custom-select">
+                    <!-- Dynamic list of domains -->
+                  </select>
+                </div>
+                <div class="form-group col-3">
+                  <label for="vlanVpcIp1">Switch 1 IP</label>
+                  <input type="text" id="vlanVpcIp1" placeholder="10.10.10.252" autocomplete="off">
+                </div>
+                <div class="form-group col-3">
+                  <label for="vlanVpcIp2">Switch 2 IP</label>
+                  <input type="text" id="vlanVpcIp2" placeholder="10.10.10.253" autocomplete="off">
+                </div>
+              </div>
+
+              <!-- Standalone Dynamic Row -->
+              <div class="form-row inline-form mt-3" id="vlanHostStandaloneRow" style="display: none;">
+                <div class="form-group col-3">
+                  <label for="vlanSw1Select">Select Switch 1</label>
+                  <select id="vlanSw1Select" class="custom-select">
+                    <!-- Dynamic list of inventory switches -->
+                  </select>
+                </div>
+                <div class="form-group col-3">
+                  <label for="vlanSw1Ip">Switch 1 IP</label>
+                  <input type="text" id="vlanSw1Ip" placeholder="10.10.10.252" autocomplete="off">
+                </div>
+                <div class="form-group col-3">
+                  <label for="vlanSw2Select">Select Switch 2 (Optional)</label>
+                  <select id="vlanSw2Select" class="custom-select">
+                    <!-- Dynamic list of inventory switches -->
+                  </select>
+                </div>
+                <div class="form-group col-3">
+                  <label for="vlanSw2Ip">Switch 2 IP</label>
+                  <input type="text" id="vlanSw2Ip" placeholder="10.10.10.253" autocomplete="off">
+                </div>
+              </div>
+
+              <div class="form-row inline-form mt-3">
+                <div class="form-group col-6 flex-align" style="align-items: flex-end;">
+                  <div id="hsrpVpcPairIndicator" class="vpc-pair-badge" style="display: none; padding: 0.5rem 0.8rem; border-radius: 6px; font-size: 0.85rem; font-weight: 500; display: inline-flex; align-items: center; gap: 0.5rem;">
+                    <!-- Auto detection alert -->
+                  </div>
+                </div>
+                <div class="form-group col-2">
+                  <label for="vlanPri1">HSRP Pri Switch 1</label>
+                  <input type="number" id="vlanPri1" placeholder="150" min="1" max="255">
+                </div>
+                <div class="form-group col-2">
+                  <label for="vlanPri2">HSRP Pri Switch 2</label>
+                  <input type="number" id="vlanPri2" placeholder="120" min="1" max="255">
+                </div>
+                <div class="form-group col-2 button-align">
+                  <button type="button" id="btnAddVlan" class="btn btn-secondary btn-full">+ Add VLAN</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="vlan-table-container mt-4">
+              <table id="vlanTable">
+                <thead>
+                  <tr>
+                    <th>VLAN ID</th>
+                    <th>VLAN Name</th>
+                    <th>Switch 1 / 2 IPs</th>
+                    <th>Virtual gateway VIP</th>
+                    <th>HSRP Priority</th>
+                    <th style="width: 80px; text-align: center;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="vlanTableBody">
+                  <!-- Dynamic Rows -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: DOWNSTREAM PORT-CHANNELS -->
+      <div id="ds-pc-tab" class="tab-content">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon">🔌</div>
+            <h2>Configure Downstream Port-Channels (IOS Switch)</h2>
+          </div>
+          <div class="card-body">
+            <div class="vlan-form-entry">
+              <div class="form-row inline-form">
+                <div class="form-group col-6">
+                  <label for="dsPcSwitchSelect">Select Target Switch</label>
+                  <select id="dsPcSwitchSelect" class="custom-select">
+                    <!-- Dynamic list of downstream inventory switches -->
+                  </select>
+                </div>
+                <div class="form-group col-6">
+                  <label for="dsPcId">Port-Channel ID</label>
+                  <input type="number" id="dsPcId" placeholder="10" min="1" max="4096">
+                </div>
+              </div>
+
+              <div class="form-row inline-form mt-3">
+                <div class="form-group col-8">
+                  <label for="dsPcInterfaces">Physical Member Ports (Comma Separated)</label>
+                  <input type="text" id="dsPcInterfaces" placeholder="e.g. Ethernet0/0, Ethernet1/0" autocomplete="off">
+                </div>
+                <div class="form-group col-4 button-align">
+                  <button type="button" id="btnAddDsPc" class="btn btn-secondary btn-full">+ Add Port-Channel</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="vlan-table-container mt-4">
+              <table id="dsPcTable">
+                <thead>
+                  <tr>
+                    <th>Switch</th>
+                    <th>Port-Channel ID</th>
+                    <th>Member Interfaces</th>
+                    <th style="width: 80px; text-align: center;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="dsPcTableBody">
+                  <!-- Dynamic Rows -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: DOWNSTREAM SVIS -->
+      <div id="ds-svi-tab" class="tab-content">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon">🌐</div>
+            <h2>Configure Downstream SVI Interfaces (IOS Switch)</h2>
+          </div>
+          <div class="card-body">
+            <div class="vlan-form-entry">
+              <div class="form-row inline-form">
+                <div class="form-group col-2">
+                  <label for="dsSviSwitchSelect">Select Target Switch</label>
+                  <select id="dsSviSwitchSelect" class="custom-select">
+                    <!-- Dynamic list of downstream inventory switches -->
+                  </select>
+                </div>
+                <div class="form-group col-2">
+                  <label for="dsSviVlanId">VLAN ID</label>
+                  <input type="number" id="dsSviVlanId" placeholder="10" min="1" max="4094">
+                </div>
+                <div class="form-group col-2">
+                  <label for="dsSviVlanName">VLAN Name</label>
+                  <input type="text" id="dsSviVlanName" placeholder="DATA" autocomplete="off">
+                </div>
+                <div class="form-group col-3">
+                  <label for="dsSviIp">IP Address</label>
+                  <input type="text" id="dsSviIp" placeholder="10.10.10.1" autocomplete="off">
+                </div>
+                <div class="form-group col-3">
+                  <label for="dsSviNetmask">Netmask</label>
+                  <input type="text" id="dsSviNetmask" placeholder="255.255.255.0" autocomplete="off">
+                </div>
+              </div>
+
+              <div class="form-row mt-3 flex-end">
+                <div class="form-group col-3 button-align">
+                  <button type="button" id="btnAddDsSvi" class="btn btn-secondary btn-full">+ Add SVI Gateway</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="vlan-table-container mt-4">
+              <table id="dsSviTable">
+                <thead>
+                  <tr>
+                    <th>Switch</th>
+                    <th>Interface VLAN</th>
+                    <th>IP / Subnet Mask</th>
+                    <th style="width: 80px; text-align: center;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="dsSviTableBody">
+                  <!-- Dynamic Rows -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 4: DEPLOY & VERIFY -->
+      <div id="deploy-tab" class="tab-content">
+        <div class="deploy-grid">
+      <!-- A. Dynamic Code Preview -->
+      <div class="card file-preview-card">
+        <div class="card-header space-between">
+          <div class="flex-align">
+            <div class="card-icon">📄</div>
+            <h2>Ansible Variables Generator</h2>
+          </div>
+          <div class="tab-button-group">
+            <button type="button" class="tab-btn active" data-target="yaml-view">network_config.yml</button>
+            <button type="button" class="tab-btn" data-target="ini-view">inventory.ini</button>
+          </div>
+        </div>
+        <div class="card-body no-padding relative">
+          <div id="yaml-view" class="code-tab active">
+            <pre><code class="language-yaml" id="yamlContent"></code></pre>
+          </div>
+          <div id="ini-view" class="code-tab">
+            <pre><code class="language-ini" id="iniContent"></code></pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- B. Terminal Engine console -->
+      <div class="card terminal-card mt-4">
+        <div class="card-header space-between">
+          <div class="flex-align">
+            <div class="card-icon blinking">💻</div>
+            <h2>Orchestration Stream Logger</h2>
+          </div>
+          <div class="terminal-controls">
+            <button type="button" id="btnClearTerminal" class="btn-icon" title="Clear Terminal">🗑️ Clear</button>
+            <label class="auto-scroll-wrap">
+              <input type="checkbox" id="autoScroll" checked> Auto Scroll
+            </label>
+          </div>
+        </div>
+        <div class="card-body no-padding black-bg">
+          <div class="terminal" id="terminalOutput">
+            <div class="line system">> FabricOrchestra dashboard initialized. Verify settings and select modular targets.</div>
+          </div>
+        </div>
+        <div class="card-footer space-between align-center">
+          <!-- Gating Checkboxes / Targets selector -->
+          <div class="feature-selector-group">
+            <label class="feature-checkbox">
+              <input type="checkbox" id="deployVpcBox" checked>
+              <span class="custom-chk"></span>
+              Deploy vPC
+            </label>
+            <label class="feature-checkbox">
+              <input type="checkbox" id="deployHsrpBox" checked>
+              <span class="custom-chk"></span>
+              Deploy HSRP
+            </label>
+          </div>
+          <div class="deploy-button-group">
+            <button type="button" id="btnSaveConfig" class="btn btn-secondary">💾 Save State</button>
+            <button type="button" id="btnVerify" class="btn btn-warning">🔍 Run Verification</button>
+            <button type="button" id="btnDeploy" class="btn btn-primary" style="display: none; background-color: var(--success); box-shadow: 0 4px 14px 0 var(--success-glow);">🚀 Push to Production</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

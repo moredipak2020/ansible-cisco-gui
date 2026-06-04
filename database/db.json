@@ -1,0 +1,113 @@
+{
+  "credentials": {
+    "username": "admin",
+    "password": "admin"
+  },
+  "ansible_server": {
+    "target": "remote",
+    "host": "192.168.1.12",
+    "port": 22,
+    "username": "root",
+    "password": "admin",
+    "workspace": "/home/admin/ansible-nexus"
+  },
+  "devices": [
+    {
+      "id": "1780076767676",
+      "name": "NXOS-SW-1",
+      "ip": "192.168.1.19",
+      "role": "leaf-primary"
+    },
+    {
+      "id": "1780076783889",
+      "name": "NXOS-SW-2",
+      "ip": "192.168.1.13",
+      "role": "leaf-primary"
+    },
+    {
+      "id": "1780084667456",
+      "name": "SW-L3",
+      "ip": "192.168.1.21",
+      "role": "downstream"
+    }
+  ],
+  "vlans": [
+    {
+      "id": 10,
+      "name": "DATA",
+      "vip": "10.10.10.254",
+      "mask": "24",
+      "ip_switch1": "10.10.10.252",
+      "ip_switch2": "10.10.10.253",
+      "hsrp_priority_switch1": 180,
+      "hsrp_priority_switch2": 150,
+      "vpc_domain_id": 99
+    },
+    {
+      "id": 100,
+      "name": "VOICE",
+      "vip": "10.10.100.254",
+      "mask": "25",
+      "ip_switch1": "10.10.100.252",
+      "ip_switch2": "10.10.100.253",
+      "hsrp_priority_switch1": 190,
+      "hsrp_priority_switch2": 160,
+      "vpc_domain_id": 99
+    }
+  ],
+  "vpc_domains": [
+    {
+      "domain_id": 99,
+      "name": "vPC-Pair-Pod1",
+      "primary_switch": "NXOS-SW-1",
+      "secondary_switch": "NXOS-SW-2",
+      "peer_link": {
+        "channel_group": 99,
+        "interfaces": [
+          "Ethernet1/1",
+          "Ethernet1/2"
+        ]
+      },
+      "peer_keepalive": {
+        "primary_ip": "192.168.1.19",
+        "secondary_ip": "192.168.1.13",
+        "vrf": "management"
+      },
+      "downstream_connections": [
+        {
+          "id": "link-1780079554784",
+          "target_device_name": "SW-L3",
+          "channel_group": 1000,
+          "vpc_id": 1000,
+          "primary_member_interfaces": [
+            "Ethernet1/3"
+          ],
+          "secondary_member_interfaces": [
+            "Ethernet1/3"
+          ]
+        }
+      ]
+    }
+  ],
+  "downstream_port_channels": [
+    {
+      "id": "ds-pc-1780084734097",
+      "switch_name": "SW-L3",
+      "port_channel_id": 10,
+      "interfaces": [
+        "Ethernet0/0",
+        "Ethernet1/0"
+      ]
+    }
+  ],
+  "downstream_svis": [
+    {
+      "id": "ds-svi-1780084772442",
+      "switch_name": "SW-L3",
+      "vlan_id": 10,
+      "vlan_name": "DATA",
+      "ip_address": "10.10.10.1",
+      "netmask": "255.255.255.0"
+    }
+  ]
+}

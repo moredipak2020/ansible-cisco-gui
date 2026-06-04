@@ -1,0 +1,15 @@
+{
+  "name": "nexus-vpc-hsrp-gui",
+  "version": "1.0.0",
+  "description": "Web GUI for Cisco Nexus vPC and HSRP Automation",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "js-yaml": "^4.1.0",
+    "ssh2": "^1.17.0"
+  }
+}

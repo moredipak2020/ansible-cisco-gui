@@ -1,0 +1,238 @@
+---
+- name: Configure vPC and HSRP on Cisco Nexus Switches
+  hosts: nexus
+  gather_facts: no
+  vars_files:
+    - vars/network_config.yml
+
+  pre_tasks:
+    - name: 0. Resolve Local Switch Configuration Details
+      set_fact:
+        local_device: "{{ nexus_devices | selectattr('name', 'equalto', inventory_hostname) | first }}"
+        my_vpc: "{{ (vpc_domains | selectattr('primary_switch', 'equalto', inventory_hostname) | list + vpc_domains | selectattr('secondary_switch', 'equalto', inventory_hostname) | list) | first | default(none) }}"
+      failed_when: local_device is not defined
+      tags: [always]
+
+    - name: 0.5 Flatten Downstream Links and Filter VLANs
+      set_fact:
+        my_downstream_links_raw: >-
+          {%- set links = [] -%}
+          {%- if my_vpc is not none and my_vpc.downstream_connections is defined -%}
+            {%- for conn in my_vpc.downstream_connections -%}
+              {%- set intfs = conn.primary_member_interfaces if inventory_hostname == my_vpc.primary_switch else conn.secondary_member_interfaces -%}
+              {%- for intf in intfs -%}
+                {%- set _ = links.append({'interface': intf, 'channel_group': conn.channel_group}) -%}
+              {%- endfor -%}
+            {%- endfor -%}
+          {%- endif -%}
+          {{- links | to_json -}}
+        my_vlans_raw: >-
+          {%- set local_vlans = [] -%}
+          {%- for vlan in vlans -%}
+            {%- if (vlan.vpc_domain_id is defined and my_vpc is not none and vlan.vpc_domain_id == my_vpc.domain_id) or (vlan.switch1 is defined and vlan.switch1 == inventory_hostname) or (vlan.switch2 is defined and vlan.switch2 == inventory_hostname) -%}
+              {%- set _ = local_vlans.append(vlan) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{- local_vlans | to_json -}}
+      tags: [always]
+
+    - name: 0.6 Parse Flattened Lists
+      set_fact:
+        my_downstream_links: "{{ my_downstream_links_raw | from_json }}"
+        my_vlans: "{{ my_vlans_raw | from_json }}"
+      tags: [always]
+
+  tasks:
+    # --- PHASE 1: ENABLE FEATURES ---
+    - name: 1. Enable Required Features
+      cisco.nxos.nxos_config:
+        lines:
+          - feature vpc
+          - feature lacp
+          - feature interface-vlan
+          - feature hsrp
+      tags: [always]
+
+    # --- PHASE 2: vPC SETUP ---
+    - name: 2. Configure vPC Domain and Keepalive
+      cisco.nxos.nxos_config:
+        parents: "vpc domain {{ my_vpc.domain_id }}"
+        lines:
+          - "peer-keepalive destination {{ (inventory_hostname == my_vpc.primary_switch) | ternary(my_vpc.peer_keepalive.secondary_ip, my_vpc.peer_keepalive.primary_ip) }} source {{ (inventory_hostname == my_vpc.primary_switch) | ternary(my_vpc.peer_keepalive.primary_ip, my_vpc.peer_keepalive.secondary_ip) }} vrf management"
+      when: my_vpc is not none
+      tags: [vpc]
+
+    - name: 3. Configure Physical Interfaces for Peer-Link
+      cisco.nxos.nxos_config:
+        parents: "interface {{ item }}"
+        lines:
+          - "channel-group {{ my_vpc.peer_link.channel_group }} mode active"
+          - no shutdown
+      loop: "{{ my_vpc.peer_link.interfaces }}"
+      when: my_vpc is not none and my_vpc.peer_link is defined
+      tags: [vpc]
+
+    - name: 4. Configure Port-Channel for Peer-Link
+      cisco.nxos.nxos_config:
+        parents: "interface port-channel{{ my_vpc.peer_link.channel_group }}"
+        lines:
+          - switchport
+          - switchport mode trunk
+          - spanning-tree port type network
+          - vpc peer-link
+      when: my_vpc is not none and my_vpc.peer_link is defined
+      tags: [vpc]
+
+    - name: 5. Configure Physical Interfaces for Downstream
+      cisco.nxos.nxos_config:
+        parents: "interface {{ item.interface }}"
+        lines:
+          - "channel-group {{ item.channel_group }} mode active"
+          - no shutdown
+      loop: "{{ my_downstream_links }}"
+      when: my_vpc is not none and my_downstream_links | length > 0
+      tags: [vpc]
+
+    - name: 6. Configure Port-Channel for Downstream
+      cisco.nxos.nxos_config:
+        parents: "interface port-channel{{ item.channel_group }}"
+        lines:
+          - switchport
+          - switchport mode trunk
+          - "vpc {{ item.vpc_id }}"
+      loop: "{{ my_vpc.downstream_connections | default([]) }}"
+      when: my_vpc is not none
+      tags: [vpc]
+
+    # --- PHASE 3: VLAN & HSRP SETUP ---
+    - name: 7. Create Layer 2 VLANs
+      cisco.nxos.nxos_config:
+        parents: "vlan {{ item.id }}"
+        lines:
+          - "name {{ item.name }}"
+      loop: "{{ my_vlans }}"
+      tags: [hsrp]
+
+    - name: 8. Configure SVI IP Addresses
+      cisco.nxos.nxos_config:
+        parents: "interface vlan {{ item.id }}"
+        lines:
+          - "ip address {{ is_primary | ternary(item.ip_switch1, item.ip_switch2) }}/{{ item.mask }}"
+          - no shutdown
+      loop: "{{ my_vlans }}"
+      vars:
+        is_primary: "{{ (my_vpc is not none and inventory_hostname == my_vpc.primary_switch) or (item.switch1 is defined and inventory_hostname == item.switch1) or (item.ip_switch2 is not defined or item.ip_switch2 == '') }}"
+      tags: [hsrp]
+
+    - name: 8.5 Configure HSRP Version 2 on SVIs
+      cisco.nxos.nxos_config:
+        parents: "interface vlan {{ item.id }}"
+        lines:
+          - "hsrp version 2"
+      loop: "{{ my_vlans }}"
+      tags: [hsrp]
+
+    - name: 9. Configure HSRP Active / Standby Groups
+      cisco.nxos.nxos_config:
+        parents: 
+          - "interface vlan {{ item.id }}"
+          - "hsrp {{ item.id }}"
+        lines: "{{ is_primary | ternary(hsrp_primary_lines, hsrp_secondary_lines) }}"
+      loop: "{{ my_vlans }}"
+      vars:
+        is_primary: "{{ (my_vpc is not none and inventory_hostname == my_vpc.primary_switch) or (item.switch1 is defined and inventory_hostname == item.switch1) }}"
+        hsrp_primary_lines:
+          - "ip {{ item.vip }}"
+          - "priority {{ item.hsrp_priority_switch1 | default(150) }}"
+          - preempt
+        hsrp_secondary_lines:
+          - "ip {{ item.vip }}"
+          - "priority {{ item.hsrp_priority_switch2 | default(120) }}"
+      when: item.vip is defined and item.vip != ""
+      tags: [hsrp]
+
+    # --- PHASE 4: SAVE CONFIGURATION ---
+    - name: 10. Save the Running Configuration to Startup
+      cisco.nxos.nxos_config:
+        save_when: modified
+      tags: [always]
+
+
+# --- SECOND PLAY: DOWNSTREAM IOS SWITCHES ---
+- name: Configure Port-Channel and SVIs on Downstream IOS Switches
+  hosts: downstream
+  gather_facts: no
+  vars_files:
+    - vars/network_config.yml
+  vars:
+    ansible_network_os: cisco.ios.ios
+    ansible_connection: ansible.netcommon.network_cli
+
+  pre_tasks:
+    - name: 0.55 Flatten Downstream Port-Channel Interfaces
+      set_fact:
+        ds_flat_interfaces_raw: >-
+          {%- set links = [] -%}
+          {%- for pc in downstream_port_channels | default([]) -%}
+            {%- if inventory_hostname == pc.switch_name -%}
+              {%- for intf in pc.interfaces -%}
+                {%- set _ = links.append({'interface': intf, 'port_channel': pc.port_channel_id}) -%}
+              {%- endfor -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{- links | to_json -}}
+      tags: [always]
+
+    - name: 0.65 Parse Downstream Flattened List
+      set_fact:
+        ds_flat_interfaces: "{{ ds_flat_interfaces_raw | from_json }}"
+      tags: [always]
+
+  tasks:
+    - name: Configure Layer 2 VLANs
+      cisco.ios.ios_config:
+        parents: "vlan {{ item.vlan_id }}"
+        lines:
+          - "name {{ item.vlan_name }}"
+      loop: "{{ downstream_svis | default([]) }}"
+      when: inventory_hostname == item.switch_name
+      tags: [downstream]
+
+    - name: Configure Port-Channel Interface
+      cisco.ios.ios_config:
+        parents: "interface Port-channel{{ item.port_channel_id }}"
+        lines:
+          - switchport
+          - switchport trunk encapsulation dot1q
+          - switchport mode trunk
+          - no shutdown
+      loop: "{{ downstream_port_channels | default([]) }}"
+      when: inventory_hostname == item.switch_name
+      tags: [downstream]
+
+    - name: Configure Physical Interfaces under Port-Channel
+      cisco.ios.ios_config:
+        parents: "interface {{ item.interface }}"
+        lines:
+          - switchport trunk encapsulation dot1q
+          - switchport mode trunk
+          - "channel-group {{ item.port_channel }} mode active"
+          - no shutdown
+      loop: "{{ ds_flat_interfaces | default([]) }}"
+      tags: [downstream]
+
+    - name: Configure Downstream SVIs
+      cisco.ios.ios_config:
+        parents: "interface Vlan{{ item.vlan_id }}"
+        lines:
+          - "ip address {{ item.ip_address }} {{ item.netmask }}"
+          - no shutdown
+      loop: "{{ downstream_svis | default([]) }}"
+      when: inventory_hostname == item.switch_name
+      tags: [downstream]
+
+    - name: Save the Running Configuration on Downstream
+      cisco.ios.ios_config:
+        save_when: modified
+      tags: [downstream]
+

@@ -1,0 +1,55 @@
+---
+- name: Configure vPC between N9K-1 and N9K-2
+  hosts: nexus
+  gather_facts: no
+
+  tasks:
+    - name: 1. Enable Required Features
+      cisco.nxos.nxos_config:
+        lines:
+          - feature vpc
+          - feature lacp
+
+    - name: 2. Configure vPC Domain and Keepalive
+      cisco.nxos.nxos_config:
+        # 'parents' forces Ansible to enter the vpc menu first
+        parents: vpc domain 10
+        lines:
+          - peer-keepalive destination {{ peer_ip }} source {{ src_ip }} vrf management
+
+    - name: 3. Configure Physical Interfaces for Peer-Link
+      cisco.nxos.nxos_config:
+        parents: interface Ethernet1/2-3
+        lines:
+          - switchport
+          - channel-group 10 mode active
+          - no shutdown
+
+    - name: 4. Configure Port-Channel for Peer-Link
+      cisco.nxos.nxos_config:
+        parents: interface port-channel10
+        lines:
+          - switchport
+          - switchport mode trunk
+          - spanning-tree port type network
+          - vpc peer-link
+
+    - name: 5. Configure Physical Interface for Downstream
+      cisco.nxos.nxos_config:
+        parents: interface Ethernet1/1
+        lines:
+          - switchport
+          - channel-group 100 mode active
+          - no shutdown
+
+    - name: 6. Configure Port-Channel for Downstream
+      cisco.nxos.nxos_config:
+        parents: interface port-channel100
+        lines:
+          - switchport
+          - switchport mode trunk
+          - vpc 100
+
+    - name: 7. Save the configuration
+      cisco.nxos.nxos_config:
+        save_when: modified
