@@ -55,34 +55,34 @@ graph TD
     end
 
     %% Client -> Backend
-    UI -->|JSON Config Updates| Router
-    UI -->|Run Simulation / Deploy| Router
-    Terminal <==|Server-Sent Events (SSE) logs| Router
-    Copilot -->|Chat query / Provider configs| RAGRouter
-    PDF -->|Upload PDF Buffer| Router
+    UI -->|"JSON Config Updates"| Router
+    UI -->|"Run Simulation / Deploy"| Router
+    Router ==>|"Server-Sent Events (SSE) logs"| Terminal
+    Copilot -->|"Chat query / Provider configs"| RAGRouter
+    PDF -->|"Upload PDF Buffer"| Router
     
     %% Backend internal and external integrations
-    Router -->|Read/Write state| LocalDB
-    Router -->|Compile configuration vars| Compiler
-    Router -->|Post configuration payload| AuditEngine
-    Router -->|Initiate SSH Deployments| SSH
-    Router -->|Extract PDF text| PDFParse
-    Router -->|Route RAG indexing/search| RAGRouter
+    Router -->|"Read/Write state"| LocalDB
+    Router -->|"Compile configuration vars"| Compiler
+    Router -->|"Post configuration payload"| AuditEngine
+    Router -->|"Initiate SSH Deployments"| SSH
+    Router -->|"Extract PDF text"| PDFParse
+    Router -->|"Route RAG indexing/search"| RAGRouter
     
     %% RAG & AI integrations
-    PDFParse -->|Clean Markdown Chunks| RAGRouter
-    RAGRouter -->|Create collections, Add documents, Query| Chroma
-    RAGRouter -->|Generate embeddings & Chat prompts| Gemini
-    RAGRouter -->|Generate embeddings & Chat prompts| Ollama
+    PDFParse -->|"Clean Markdown Chunks"| RAGRouter
+    RAGRouter -->|"Create collections, Add documents, Query"| Chroma
+    RAGRouter -->|"Generate embeddings & Chat prompts"| Gemini
+    RAGRouter -->|"Generate embeddings & Chat prompts"| Ollama
     
     %% Backend -> Control Node
-    SSH ===>|Transfer playbooks, vars, inventory & run playbook| AnsibleEngine
-    Compiler -->|Writes vars & inventory| Vars
+    SSH ==>|"Transfer playbooks, vars, inventory & run playbook"| AnsibleEngine
+    Compiler -->|"Writes vars & inventory"| Vars
     
     %% Control Node -> Targets
-    AnsibleEngine -->|Provision fabric via SSH/Netconf| CiscoNX
-    AnsibleEngine -->|Provision aggregates| CiscoIOS
-    AnsibleEngine -->|Configure security & NAT policies| PaloFW
+    AnsibleEngine -->|"Provision fabric via SSH/Netconf"| CiscoNX
+    AnsibleEngine -->|"Provision aggregates"| CiscoIOS
+    AnsibleEngine -->|"Configure security & NAT policies"| PaloFW
 ```
 
 ---
