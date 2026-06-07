@@ -4,3 +4,6 @@ node_modules/
 .system_generated/
 .tempmediaStorage/
 scratch/
+chroma_db/
+database/kb_store.json
+

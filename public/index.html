@@ -110,11 +110,24 @@
 
     <!-- MAIN NAVIGATION TABS -->
     <nav class="main-nav">
-      <button type="button" class="nav-tab active" data-tab="settings-tab">🖥️ Switch Inventory</button>
-      <button type="button" class="nav-tab" data-tab="vpc-tab">🌐 vPC Configurations</button>
-      <button type="button" class="nav-tab" data-tab="hsrp-tab">⚡ HSRP Interface Gateway</button>
-      <button type="button" class="nav-tab" data-tab="ds-pc-tab">🔌 Downstream Port-Channels</button>
-      <button type="button" class="nav-tab" data-tab="ds-svi-tab">🌐 Downstream SVIs</button>
+      <div class="nav-dropdown">
+        <button type="button" class="nav-tab dropdown-toggle" id="ciscoDropdownToggle">🔵 Cisco Provisioning ▾</button>
+        <div class="dropdown-menu">
+          <button type="button" class="dropdown-item active" data-tab="settings-tab">🖥️ Switch Inventory</button>
+          <button type="button" class="dropdown-item" data-tab="vpc-tab">🌐 vPC Configurations</button>
+          <button type="button" class="dropdown-item" data-tab="hsrp-tab">⚡ HSRP Interface Gateway</button>
+          <button type="button" class="dropdown-item" data-tab="ds-pc-tab">🔌 Downstream Port-Channels</button>
+          <button type="button" class="dropdown-item" data-tab="ds-svi-tab">🌐 Downstream SVIs</button>
+        </div>
+      </div>
+      <div class="nav-dropdown">
+        <button type="button" class="nav-tab dropdown-toggle" id="paloDropdownToggle">🛡️ Palo Alto Firewall ▾</button>
+        <div class="dropdown-menu">
+          <button type="button" class="dropdown-item" data-tab="paloalto-tab">🏷️ Policies & Objects</button>
+          <button type="button" class="dropdown-item" data-tab="paloalto-audit-tab">🔍 Security Policy Audit</button>
+        </div>
+      </div>
+      <button type="button" class="nav-tab" data-tab="copilot-tab">🧠 RAG Copilot</button>
       <button type="button" class="nav-tab" data-tab="deploy-tab">🚀 Verify and Push</button>
     </nav>
 
@@ -423,6 +436,609 @@
         </div>
       </div>
 
+      <!-- TAB 5: PALO ALTO FIREWALL (POLICIES & OBJECTS) -->
+      <div id="paloalto-tab" class="tab-content">
+
+        <!-- Master Active Firewall Selector Bar -->
+        <div class="card" style="margin-bottom: 1.5rem;">
+          <div class="card-body" style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.8rem 1.2rem;">
+            <div style="display: flex; align-items: center; gap: 0.8rem;">
+              <span style="font-size: 1.2rem;">🛡️</span>
+              <div>
+                <h3 style="font-size: 0.85rem; font-weight: 700; color: var(--text-main); margin: 0;">Active Firewall Target</h3>
+                <span id="activeFwModeBadge" class="zone-badge" style="font-size: 0.65rem; margin-top: 0.1rem; display: inline-block;">Standalone Mode</span>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.8rem; flex: 1; max-width: 400px;">
+              <select id="activePaloSelector" class="custom-select" style="font-weight: 600; width: 100%;">
+                <!-- Options populated dynamically from state.palo_alto.devices -->
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="deploy-grid">
+          <!-- Left side: Object managers -->
+          <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+            <!-- Address Objects -->
+            <div class="card">
+              <div class="card-header">
+                <div class="card-icon">🏷️</div>
+                <h2>Security Address Objects</h2>
+              </div>
+              <div class="card-body">
+                <div class="form-row inline-form">
+                  <div class="form-group col-4">
+                    <label for="addrObjName">Object Name</label>
+                    <input type="text" id="addrObjName" placeholder="e.g. Web_Server_Net" autocomplete="off">
+                  </div>
+                  <div class="form-group col-4">
+                    <label for="addrObjType">Type</label>
+                    <select id="addrObjType" class="custom-select">
+                      <option value="ip-netmask">IP Netmask (CIDR)</option>
+                      <option value="ip-range">IP Range</option>
+                      <option value="fqdn">FQDN</option>
+                    </select>
+                  </div>
+                  <div class="form-group col-4">
+                    <label for="addrObjValue">Value</label>
+                    <input type="text" id="addrObjValue" placeholder="e.g. 10.10.10.0/24" autocomplete="off">
+                  </div>
+                </div>
+                <div class="flex-end mt-3">
+                  <button type="button" id="btnAddAddrObj" class="btn btn-secondary">+ Add Address Object</button>
+                </div>
+                <div class="vlan-table-container mt-4" style="max-height: 250px; overflow-y: auto;">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Value</th>
+                        <th style="width: 60px; text-align: center;">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="addrObjTableBody">
+                      <!-- Dynamic rows -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Service Objects -->
+            <div class="card">
+              <div class="card-header">
+                <div class="card-icon">🔌</div>
+                <h2>Security Service Objects</h2>
+              </div>
+              <div class="card-body">
+                <div class="form-row inline-form">
+                  <div class="form-group col-4">
+                    <label for="srvObjName">Service Name</label>
+                    <input type="text" id="srvObjName" placeholder="e.g. TCP_8080" autocomplete="off">
+                  </div>
+                  <div class="form-group col-4">
+                    <label for="srvObjProto">Protocol</label>
+                    <select id="srvObjProto" class="custom-select">
+                      <option value="tcp">TCP</option>
+                      <option value="udp">UDP</option>
+                    </select>
+                  </div>
+                  <div class="form-group col-4">
+                    <label for="srvObjPort">Destination Port(s)</label>
+                    <input type="text" id="srvObjPort" placeholder="e.g. 8080" autocomplete="off">
+                  </div>
+                </div>
+                <div class="flex-end mt-3">
+                  <button type="button" id="btnAddSrvObj" class="btn btn-secondary">+ Add Service Object</button>
+                </div>
+                <div class="vlan-table-container mt-4" style="max-height: 250px; overflow-y: auto;">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Protocol</th>
+                        <th>Port(s)</th>
+                        <th style="width: 60px; text-align: center;">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="srvObjTableBody">
+                      <!-- Dynamic rows -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right side: Policy Managers -->
+          <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-icon">🛡️</div>
+                <h2>Security Access Policy Matrix</h2>
+              </div>
+              <div class="card-body">
+                <div class="form-row">
+                  <div class="form-group col-6">
+                    <label for="ruleName">Rule Name</label>
+                    <input type="text" id="ruleName" placeholder="e.g. Allow_External_Web" autocomplete="off">
+                  </div>
+                  <div class="form-group col-6">
+                    <label for="ruleAction">Action</label>
+                    <select id="ruleAction" class="custom-select">
+                      <option value="allow">Allow (Greenlit)</option>
+                      <option value="deny">Deny (Blocked)</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-row mt-2">
+                  <div class="form-group col-6">
+                    <label for="ruleFromZone">Source Zone</label>
+                    <input type="text" id="ruleFromZone" placeholder="e.g. Untrust" autocomplete="off">
+                  </div>
+                  <div class="form-group col-6">
+                    <label for="ruleToZone">Destination Zone</label>
+                    <input type="text" id="ruleToZone" placeholder="e.g. Trust" autocomplete="off">
+                  </div>
+                </div>
+                <div class="form-row mt-2">
+                  <div class="form-group col-4">
+                    <label for="ruleSrcAddrSelect">Source Address</label>
+                    <select id="ruleSrcAddrSelect" class="custom-select">
+                      <option value="any">any</option>
+                    </select>
+                  </div>
+                  <div class="form-group col-4">
+                    <label for="ruleDstAddrSelect">Destination Address</label>
+                    <select id="ruleDstAddrSelect" class="custom-select">
+                      <option value="any">any</option>
+                    </select>
+                  </div>
+                  <div class="form-group col-4">
+                    <label for="ruleSrvSelect">Service</label>
+                    <select id="ruleSrvSelect" class="custom-select">
+                      <option value="any">any</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="flex-end mt-3">
+                  <button type="button" id="btnAddRule" class="btn btn-secondary">+ Add Security Rule</button>
+                </div>
+
+                <div class="vlan-table-container mt-4" style="max-height: 480px; overflow-y: auto;">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Rule Name</th>
+                        <th>Zones (From/To)</th>
+                        <th>Addresses (Src/Dst)</th>
+                        <th>Service</th>
+                        <th>Action</th>
+                        <th style="width: 60px; text-align: center;">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="ruleTableBody">
+                      <!-- Dynamic rows -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- NAT Policy Matrix -->
+            <div class="card">
+              <div class="card-header">
+                <div class="card-icon">🌐</div>
+                <h2>Destination NAT Policy Matrix</h2>
+              </div>
+              <div class="card-body">
+                <div class="form-row">
+                  <div class="form-group col-6">
+                    <label for="natRuleName">NAT Rule Name</label>
+                    <input type="text" id="natRuleName" placeholder="e.g. Web_Port_Forward" autocomplete="off">
+                  </div>
+                  <div class="form-group col-3">
+                    <label for="natFromZone">Source Zone</label>
+                    <input type="text" id="natFromZone" placeholder="e.g. Untrust" autocomplete="off">
+                  </div>
+                  <div class="form-group col-3">
+                    <label for="natToZone">Destination Zone</label>
+                    <input type="text" id="natToZone" placeholder="e.g. Trust" autocomplete="off">
+                  </div>
+                </div>
+
+                <div class="form-row mt-2">
+                  <div class="form-group col-4">
+                    <label for="natSrcAddrSelect">Original Source IP</label>
+                    <select id="natSrcAddrSelect" class="custom-select">
+                      <option value="any">any</option>
+                    </select>
+                  </div>
+                  <div class="form-group col-4">
+                    <label for="natDstAddrSelect">Original Destination IP</label>
+                    <select id="natDstAddrSelect" class="custom-select">
+                      <option value="any">any</option>
+                    </select>
+                  </div>
+                  <div class="form-group col-4">
+                    <label for="natSrvSelect">Original Service / Port</label>
+                    <select id="natSrvSelect" class="custom-select">
+                      <option value="any">any</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="form-row mt-2">
+                  <div class="form-group col-6">
+                    <label for="natTransIp">Translated Destination IP</label>
+                    <input type="text" id="natTransIp" placeholder="e.g. 10.10.10.100" autocomplete="off">
+                  </div>
+                  <div class="form-group col-6">
+                    <label for="natTransPort">Translated Destination Port</label>
+                    <input type="text" id="natTransPort" placeholder="e.g. 8080" autocomplete="off">
+                  </div>
+                </div>
+
+                <div class="flex-end mt-3">
+                  <button type="button" id="btnAddNatRule" class="btn btn-secondary">+ Add NAT Rule</button>
+                </div>
+
+                <div class="vlan-table-container mt-4" style="max-height: 250px; overflow-y: auto;">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Rule Name</th>
+                        <th>Zones (From/To)</th>
+                        <th>Original (Src/Dst/Port)</th>
+                        <th>Translation (IP:Port)</th>
+                        <th style="width: 60px; text-align: center;">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="natTableBody">
+                      <!-- Dynamic rows populated from JS -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+          </div> <!-- End of Right side: Policy Managers -->
+        </div> <!-- End of deploy-grid -->
+
+      </div>
+
+      <!-- TAB 5B: PALO ALTO FIREWALL SECURITY POLICY AUDIT -->
+      <div id="paloalto-audit-tab" class="tab-content">
+        <!-- Node Credentials & Device Inventory Card -->
+        <div class="card" style="margin-bottom: 1.5rem;">
+          <div class="card-header">
+            <div class="card-icon">🛡️</div>
+            <h2>Palo Alto Firewall Inventory & Credentials</h2>
+          </div>
+          <div class="card-body">
+            <div class="form-row">
+              <div class="form-group col-3">
+                <label for="paloFwName">Firewall Name</label>
+                <input type="text" id="paloFwName" placeholder="e.g. Core-FW" autocomplete="off">
+              </div>
+              <div class="form-group col-3">
+                <label for="paloFwMode">Deployment Mode</label>
+                <select id="paloFwMode" class="custom-select">
+                  <option value="standalone">Standalone</option>
+                  <option value="ha-pair">HA Pair (Active/Passive)</option>
+                </select>
+              </div>
+              <div class="form-group col-3">
+                <label for="paloHost">Primary Mgmt IP / Hostname</label>
+                <input type="text" id="paloHost" placeholder="e.g. 192.168.1.50" autocomplete="off">
+              </div>
+              <div class="form-group col-3" id="paloHostSecondaryContainer" style="display: none;">
+                <label for="paloHostSecondary">Secondary Mgmt IP / Hostname</label>
+                <input type="text" id="paloHostSecondary" placeholder="e.g. 192.168.1.51" autocomplete="off">
+              </div>
+            </div>
+            <div class="form-row mt-2">
+              <div class="form-group col-3">
+                <label for="paloPort">HTTPS API Port</label>
+                <input type="number" id="paloPort" value="443" min="1" max="65535">
+              </div>
+              <div class="form-group col-4">
+                <label for="paloUser">API Username</label>
+                <input type="text" id="paloUser" placeholder="admin" autocomplete="off">
+              </div>
+              <div class="form-group col-5">
+                <label for="paloPass">API Password</label>
+                <input type="password" id="paloPass" placeholder="••••••••">
+              </div>
+            </div>
+            
+            <div class="flex-end mt-3">
+              <button type="button" id="btnSavePaloDevice" class="btn btn-secondary">+ Save Firewall Device</button>
+            </div>
+
+            <!-- Firewall Devices Grid Table -->
+            <div class="vlan-table-container mt-4" style="max-height: 200px; overflow-y: auto;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Firewall Name</th>
+                    <th>Mode</th>
+                    <th>Mgmt IP(s)</th>
+                    <th>Port</th>
+                    <th>User</th>
+                    <th>Status</th>
+                    <th style="width: 180px; text-align: center;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="paloDevicesTableBody">
+                  <!-- Dynamically populated from JS -->
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Policy Audit Card -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon">🔍</div>
+            <h2>Palo Alto Security Policy Audit & Clean-up</h2>
+          </div>
+          <div class="card-body">
+            <p style="font-size: 0.72rem; color: var(--text-muted); line-height: 1.4; margin-bottom: 0.8rem;">
+              Perform security policy rule hit audits, scan for cleartext services, identify shadowed rules, and clean up the rules list. Audits active policies in the GUI or queries a live firewall node.
+            </p>
+            <div class="form-row align-items-end">
+              <div class="form-group col-6">
+                <label for="paloAuditSource">Audit Target Source</label>
+                <select id="paloAuditSource" class="custom-select">
+                  <option value="gui">Active Rules in GUI Policy Matrix</option>
+                  <option value="live">Live Firewall Connection (XML API / Simulation)</option>
+                </select>
+              </div>
+              <div class="form-group col-6" style="display: flex; gap: 0.5rem; justify-content: flex-end; align-items: flex-end;">
+                <button type="button" id="btnRunPaloAudit" class="btn btn-primary" style="flex: 1;">⚡ Run Security Audit</button>
+                <button type="button" id="btnDownloadPaloAuditCsv" class="btn btn-secondary" style="flex: 1;" disabled>📥 Download CSV Report</button>
+              </div>
+            </div>
+            
+            <div id="paloAuditStatus" class="console-box mt-3" style="display: none; padding: 0.6rem; font-size: 0.72rem; border-radius: 4px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); color: var(--primary);">
+              Audit Status: Idle. Click 'Run Security Audit' to begin scanning policies.
+            </div>
+
+            <!-- Audit Score Card Panel -->
+            <div id="paloAuditScorePanel" style="display: none; margin-bottom: 1.5rem; margin-top: 1.2rem;">
+              <div class="audit-summary-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.75rem;">
+                
+                <!-- Grade card -->
+                <div class="audit-stat-card" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.8rem; text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                  <div style="font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem;">Security Grade</div>
+                  <div id="paloAuditGrade" style="font-size: 2.2rem; font-weight: 800; color: #ef4444; text-shadow: 0 0 10px rgba(239, 68, 68, 0.3); font-family: var(--font-mono);">F</div>
+                  <div id="paloAuditScore" style="font-size: 0.72rem; color: var(--text-main); font-weight: 600; margin-top: 0.25rem;">Score: 42/100</div>
+                </div>
+
+                <!-- Unused Rules stat -->
+                <div class="audit-stat-card" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.8rem; text-align: center;">
+                  <div style="font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem;">Unused Rules</div>
+                  <div id="paloStatUnused" style="font-size: 1.8rem; font-weight: 700; color: var(--text-main); font-family: var(--font-mono);">4</div>
+                  <div style="font-size: 0.6rem; color: #ef4444; margin-top: 0.2rem;">⚠️ No hits > 30 days</div>
+                </div>
+
+                <!-- Broad Access stat -->
+                <div class="audit-stat-card" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.8rem; text-align: center;">
+                  <div style="font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem;">Broad IP Rules</div>
+                  <div id="paloStatBroad" style="font-size: 1.8rem; font-weight: 700; color: var(--text-main); font-family: var(--font-mono);">2</div>
+                  <div style="font-size: 0.6rem; color: #ef4444; margin-top: 0.2rem;">🚨 Broad IP/Any source</div>
+                </div>
+
+                <!-- Legacy Services stat -->
+                <div class="audit-stat-card" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.8rem; text-align: center;">
+                  <div style="font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem;">Legacy Protocols</div>
+                  <div id="paloStatLegacy" style="font-size: 1.8rem; font-weight: 700; color: var(--text-main); font-family: var(--font-mono);">1</div>
+                  <div style="font-size: 0.6rem; color: #f59e0b; margin-top: 0.2rem;">⚠️ Telnet/FTP/HTTP/SMB</div>
+                </div>
+
+                <!-- Redundant/Shadowed stat -->
+                <div class="audit-stat-card" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.8rem; text-align: center;">
+                  <div style="font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem;">Redundant Rules</div>
+                  <div id="paloStatRedundant" style="font-size: 1.8rem; font-weight: 700; color: var(--text-main); font-family: var(--font-mono);">1</div>
+                  <div style="font-size: 0.6rem; color: #f59e0b; margin-top: 0.2rem;">⚠️ Overridden/Shadowed</div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- Findings Table -->
+            <div class="vlan-table-container mt-3" id="paloAuditTableContainer" style="display: none; max-height: 250px; overflow-y: auto;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Rule Name</th>
+                    <th>Source/Dest IP</th>
+                    <th>Ports / Services</th>
+                    <th>Last Hit Timeline</th>
+                    <th>Security Risk</th>
+                    <th>Recommendation</th>
+                  </tr>
+                </thead>
+                <tbody id="paloAuditTableBody">
+                  <!-- Dynamic rows -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- CLI Remediation Console -->
+            <div id="paloRemediationContainer" class="mt-4" style="display: none;">
+              <h3 style="font-size: 0.75rem; font-weight: 600; color: var(--text-main); margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 0.4rem;">
+                <span>🛡️</span> Palo Alto CLI Remediation Commands
+              </h3>
+              <p style="font-size: 0.65rem; color: var(--text-muted); margin-bottom: 0.5rem; line-height: 1.3;">
+                Execute these commands in config mode (`configure`) to disable or remove the audited rules.
+              </p>
+              <div style="position: relative;">
+                <textarea id="paloRemediationCli" readonly rows="5" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: var(--primary); font-family: var(--font-mono); font-size: 0.7rem; padding: 0.8rem; width: 100%; border-radius: 4px; resize: none;"></textarea>
+                <button type="button" id="btnCopyPaloRemediation" class="btn btn-secondary" style="position: absolute; top: 10px; right: 10px; font-size: 0.65rem; padding: 0.2rem 0.5rem; min-height: unset; background: rgba(255,255,255,0.05); border-color: var(--border-color);">📋 Copy CLI</button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 6: RAG COPILOT & AI ASSISTANT -->
+      <div id="copilot-tab" class="tab-content">
+        <div class="copilot-grid">
+          <!-- Left Panel: LLM Settings & KB Management -->
+          <div style="display: flex; flex-direction: column; gap: 1.5rem; overflow-y: auto; padding-right: 0.25rem;">
+            <!-- LLM Engine Configuration -->
+            <div class="card">
+              <div class="card-header">
+                <div class="card-icon">🤖</div>
+                <h2>Network Copilot Engine</h2>
+              </div>
+              <div class="card-body">
+                <div class="form-group">
+                  <label for="copilotProvider">LLM AI Provider</label>
+                  <select id="copilotProvider" class="custom-select">
+                    <option value="local">Local AI: Ollama (Offline)</option>
+                    <option value="gemini">Global AI: Google Gemini</option>
+                    <option value="openrouter">Global AI: OpenRouter (Claude/GPT)</option>
+                  </select>
+                </div>
+                <div class="form-group mt-2">
+                  <label for="copilotModel">Model Name</label>
+                  <input type="text" id="copilotModel" value="qwen2.5:7b" placeholder="e.g. gemma:2b, qwen2.5:7b, gemini-2.5-flash">
+                </div>
+                <div class="form-group mt-2" id="apiKeyContainer" style="display: none;">
+                  <label for="copilotApiKey">API Authentication Key</label>
+                  <input type="password" id="copilotApiKey" placeholder="Enter API Key">
+                </div>
+                <div class="form-group mt-2">
+                  <label for="chromaEndpoint">ChromaDB Endpoint</label>
+                  <div style="display: flex; gap: 0.5rem; width: 100%;">
+                    <input type="text" id="chromaEndpoint" value="http://[::1]:8000" placeholder="http://[::1]:8000" style="flex: 1;">
+                    <button type="button" id="btnStartChroma" class="btn btn-secondary" style="min-height: unset; padding: 0 0.8rem; font-size: 0.68rem; flex-shrink: 0;" title="Starts ChromaDB locally on port 8000">⚡ Start</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Knowledge Base Manager -->
+            <div class="card">
+              <div class="card-header">
+                <div class="card-icon">📚</div>
+                <h2>Knowledge Base (RAG) Registry</h2>
+              </div>
+              <div class="card-body">
+                <div class="form-row">
+                  <div class="form-group col-12">
+                    <label for="kbSelector">Selected Domain KB</label>
+                    <select id="kbSelector" class="custom-select">
+                      <option value="cisco">Cisco Nexus & IOS KB</option>
+                      <option value="paloalto">Palo Alto PAN-OS KB</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="flex-align mt-3" style="display: flex; gap: 0.5rem; width: 100%;">
+                  <button type="button" id="btnIndexKb" class="btn btn-secondary" style="flex: 1;">🔄 Index Markdown Files</button>
+                  <button type="button" id="btnCheckKbStatus" class="btn btn-warning" style="padding: 0.6rem 0.8rem;" title="Check DB Reachability">🔌 Status</button>
+                </div>
+                <div class="divider"></div>
+                <h3 class="section-title">Add Custom Chunk</h3>
+                <div class="form-group mt-2">
+                  <label for="customChunkContent">Chunk Text Content</label>
+                  <textarea id="customChunkContent" rows="4" style="background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-main); border-radius: 6px; padding: 0.6rem; font-family: var(--font-sans); resize: none; width:100%;" placeholder="Paste custom configuration template or troubleshooting guides..."></textarea>
+                </div>
+                <div class="flex-end mt-2">
+                  <button type="button" id="btnAddChunk" class="btn btn-secondary" style="font-size: 0.75rem;">+ Insert Chunk</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- AI PDF-to-Markdown Ingestion Card -->
+            <div class="card mt-3">
+              <div class="card-header">
+                <div class="card-icon">📤</div>
+                <h2>AI PDF Ingestion & Converter</h2>
+              </div>
+              <div class="card-body">
+                <p style="font-size: 0.72rem; color: var(--text-muted); line-height: 1.4; margin-bottom: 0.75rem;">
+                  Upload a PDF manual (e.g. Cisco VXLAN or Palo Alto security docs). The server will parse the text, use the active LLM to format it as structured Markdown, and index it into the active KB.
+                </p>
+                <div class="pdf-upload-zone" id="pdfUploadZone">
+                  <div class="upload-icon" style="font-size: 1.5rem; margin-bottom: 0.25rem;">📄</div>
+                  <div class="upload-text" style="font-size: 0.75rem; font-weight: 500;">Drag & Drop PDF or <span style="color: var(--primary); cursor: pointer; text-decoration: underline;">Browse</span></div>
+                  <input type="file" id="pdfFileInput" accept=".pdf" style="display: none;">
+                </div>
+                <div id="pdfFileInfo" style="display: none; margin-top: 0.75rem; font-size: 0.72rem; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); padding: 0.5rem; border-radius: 4px; align-items: center; justify-content: space-between;">
+                  <span class="file-name" style="color: var(--primary); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%;"></span>
+                  <button type="button" id="btnCancelPdf" class="btn btn-secondary" style="padding: 0.2rem 0.5rem; font-size: 0.65rem; min-height: unset; margin: 0; background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.3); color: #ef4444;">Remove</button>
+                </div>
+                <div class="flex-align mt-3" style="display: flex; gap: 0.5rem; width: 100%;">
+                  <button type="button" id="btnConvertPdf" class="btn btn-primary" style="flex: 1; font-size: 0.75rem;" disabled>⚡ Convert & Index PDF</button>
+                </div>
+                <!-- Progress bar -->
+                <div id="pdfUploadProgress" style="display: none; margin-top: 0.75rem;">
+                  <div class="progress-bar-container" style="background: rgba(255,255,255,0.05); height: 8px; border-radius: 4px; overflow: hidden; border: 1px solid var(--border-color);">
+                    <div id="pdfProgressBar" style="width: 0%; height: 100%; background: var(--primary); transition: width 0.3s ease;"></div>
+                  </div>
+                  <div id="pdfUploadStatus" style="font-size: 0.68rem; color: var(--primary); margin-top: 0.3rem; text-align: center; font-weight: 500;">
+                    Preparing upload...
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Panel: AI Chat Terminal -->
+          <div class="card chat-card" style="display: flex; flex-direction: column; height: 100%;">
+            <div class="card-header space-between" style="padding: 0.6rem 1.25rem;">
+              <div class="flex-align">
+                <div class="card-icon blinking">🧠</div>
+                <h2>Network Copilot Assistant</h2>
+              </div>
+              <div class="flex-align" style="display: flex; gap: 0.75rem; align-items: center;">
+                <label class="feature-checkbox" style="font-size: 0.72rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.25rem; margin: 0;">
+                  <input type="checkbox" id="chatUseRag" checked>
+                  <span class="custom-chk"></span> RAG Context
+                </label>
+                <label class="feature-checkbox" style="font-size: 0.72rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.25rem; margin: 0;">
+                  <input type="checkbox" id="chatIncludeGui">
+                  <span class="custom-chk"></span> Sync GUI Config
+                </label>
+                <label class="feature-checkbox" style="font-size: 0.72rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.25rem; margin: 0;">
+                  <input type="checkbox" id="chatIncludeFiles">
+                  <span class="custom-chk"></span> Sync Server Files
+                </label>
+              </div>
+            </div>
+            <!-- Chat Window -->
+            <div class="card-body" id="chatWindow" style="flex: 1; overflow-y: auto; background: rgba(2, 6, 23, 0.45); display: flex; flex-direction: column; gap: 1rem; padding: 1.25rem; font-size: 0.88rem;">
+              <div class="chat-message assistant">
+                <div class="chat-bubble">
+                  👋 Hello! I am your FabricOrchestra Network Copilot. I can help you generate Ansible playbooks, compile variables, write set CLI commands, or diagnose configuration failures. 
+                  <br><br>
+                  Select a Knowledge Base (Cisco or Palo Alto), enable **RAG Context** to consult my database guidelines, or check **Sync GUI Config** to reference your current dashboard state!
+                </div>
+              </div>
+            </div>
+            <!-- Chat Input Controls -->
+            <div class="card-footer" style="background: rgba(15, 23, 42, 0.3); border-top: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem;">
+              <div id="ragContextPreview" style="display: none; font-size: 0.72rem; color: var(--primary); background: rgba(56, 189, 248, 0.05); border: 1px solid rgba(56, 189, 248, 0.15); border-radius: 6px; padding: 0.5rem 0.75rem; line-height: 1.4;">
+                <!-- RAG Query Snippet Preview -->
+              </div>
+              <div style="display: flex; gap: 0.75rem; width: 100%;">
+                <input type="text" id="copilotInput" placeholder="Ask network questions or request playbook scripts here..." style="flex: 1; background: var(--bg-input);" autocomplete="off">
+                <button type="button" id="btnSendChat" class="btn btn-primary" style="padding: 0.6rem 1.5rem;">Send 🚀</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- TAB 4: DEPLOY & VERIFY -->
       <div id="deploy-tab" class="tab-content">
         <div class="deploy-grid">
@@ -436,6 +1052,8 @@
           <div class="tab-button-group">
             <button type="button" class="tab-btn active" data-target="yaml-view">network_config.yml</button>
             <button type="button" class="tab-btn" data-target="ini-view">inventory.ini</button>
+            <button type="button" class="tab-btn" data-target="palo-yaml-view">palo_alto_config.yml</button>
+            <button type="button" class="tab-btn" data-target="palo-set-view">palo_alto_set.txt</button>
           </div>
         </div>
         <div class="card-body no-padding relative">
@@ -444,6 +1062,12 @@
           </div>
           <div id="ini-view" class="code-tab">
             <pre><code class="language-ini" id="iniContent"></code></pre>
+          </div>
+          <div id="palo-yaml-view" class="code-tab">
+            <pre><code class="language-yaml" id="paloYamlContent"></code></pre>
+          </div>
+          <div id="palo-set-view" class="code-tab">
+            <pre><code class="language-text" id="paloSetContent"></code></pre>
           </div>
         </div>
       </div>
@@ -480,8 +1104,14 @@
               <span class="custom-chk"></span>
               Deploy HSRP
             </label>
+            <label class="feature-checkbox">
+              <input type="checkbox" id="deployPaloBox" checked>
+              <span class="custom-chk"></span>
+              Deploy Palo Alto Policy
+            </label>
           </div>
           <div class="deploy-button-group">
+            <button type="button" id="btnAnalyzeError" class="btn btn-danger" style="display: none; background-color: var(--danger); box-shadow: 0 4px 14px 0 rgba(244,63,94,0.4); margin-right: 0.5rem;">🔍 Analyze Error with AI</button>
             <button type="button" id="btnSaveConfig" class="btn btn-secondary">💾 Save State</button>
             <button type="button" id="btnVerify" class="btn btn-warning">🔍 Run Verification</button>
             <button type="button" id="btnDeploy" class="btn btn-primary" style="display: none; background-color: var(--success); box-shadow: 0 4px 14px 0 var(--success-glow);">🚀 Push to Production</button>

@@ -1,0 +1,8 @@
+palo_alto_device:
+  host: ''
+  port: 443
+  username: admin
+  password: admin
+address_objects: []
+service_objects: []
+security_rules: []

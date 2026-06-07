@@ -49,7 +49,26 @@ document.addEventListener('DOMContentLoaded', () => {
     vlans: [
       { id: 10, name: "DATA", vpc_domain_id: 10, vip: "10.10.10.254", mask: "24", ip_switch1: "10.10.10.252", ip_switch2: "10.10.10.253", hsrp_priority_switch1: 150, hsrp_priority_switch2: 120 },
       { id: 20, name: "VOICE", vpc_domain_id: 10, vip: "10.10.20.254", mask: "24", ip_switch1: "10.10.20.252", ip_switch2: "10.10.20.253", hsrp_priority_switch1: 150, hsrp_priority_switch2: 120 }
-    ]
+    ],
+    palo_alto: {
+      devices: [
+        {
+          id: 'default-fw',
+          name: 'Palo-Alto-Primary',
+          mode: 'standalone',
+          host: '192.168.1.50',
+          host_secondary: '',
+          port: 443,
+          username: 'admin',
+          password: '',
+          address_objects: [],
+          service_objects: [],
+          security_policies: [],
+          nat_policies: []
+        }
+      ],
+      activeDeviceId: 'default-fw'
+    }
   };
 
   let deploymentEventSource = null;
@@ -132,14 +151,29 @@ document.addEventListener('DOMContentLoaded', () => {
   const elDsSviTableBody = document.getElementById('dsSviTableBody');
 
   // --- NAVIGATION TAB CONTROLLER ---
-  document.querySelectorAll('.nav-tab').forEach(tab => {
+  const deactivateAllTabs = () => {
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.dropdown-item').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  };
+
+  document.querySelectorAll('.nav-tab:not(.dropdown-toggle), .dropdown-item').forEach(tab => {
     tab.addEventListener('click', () => {
-      document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      deactivateAllTabs();
       
       tab.classList.add('active');
       const targetTabId = tab.getAttribute('data-tab');
       document.getElementById(targetTabId).classList.add('active');
+      
+      if (tab.classList.contains('dropdown-item')) {
+        const parentDropdown = tab.closest('.nav-dropdown');
+        if (parentDropdown) {
+          const toggleBtn = parentDropdown.querySelector('.dropdown-toggle');
+          if (toggleBtn) {
+            toggleBtn.classList.add('active');
+          }
+        }
+      }
     });
   });
 
@@ -238,6 +272,54 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  function getActiveFirewall() {
+    if (!state.palo_alto) {
+      state.palo_alto = {
+        devices: [
+          {
+            id: 'default-fw',
+            name: 'Palo-Alto-Primary',
+            mode: 'standalone',
+            host: '192.168.1.50',
+            host_secondary: '',
+            port: 443,
+            username: 'admin',
+            password: '',
+            address_objects: [],
+            service_objects: [],
+            security_policies: [],
+            nat_policies: []
+          }
+        ],
+        activeDeviceId: 'default-fw'
+      };
+    }
+    if (!state.palo_alto.devices) {
+      const oldFw = {
+        id: 'default-fw',
+        name: 'Palo-Alto-Primary',
+        mode: 'standalone',
+        host: state.palo_alto.device?.host || '192.168.1.50',
+        host_secondary: '',
+        port: state.palo_alto.device?.port || 443,
+        username: state.palo_alto.device?.username || 'admin',
+        password: state.palo_alto.device?.password || '',
+        address_objects: state.palo_alto.address_objects || [],
+        service_objects: state.palo_alto.service_objects || [],
+        security_policies: state.palo_alto.security_policies || [],
+        nat_policies: state.palo_alto.nat_policies || []
+      };
+      state.palo_alto.devices = [oldFw];
+      state.palo_alto.activeDeviceId = 'default-fw';
+    }
+    let active = state.palo_alto.devices.find(d => d.id === state.palo_alto.activeDeviceId);
+    if (!active && state.palo_alto.devices.length > 0) {
+      active = state.palo_alto.devices[0];
+      state.palo_alto.activeDeviceId = active.id;
+    }
+    return active;
+  }
+
   function syncInputsToState() {
     state.credentials.username = elUsername.value.trim();
     state.credentials.password = elPassword.value;
@@ -250,6 +332,25 @@ document.addEventListener('DOMContentLoaded', () => {
       password: elAnsiblePass.value,
       workspace: elAnsibleWorkDir.value.trim()
     };
+
+    const activeFw = getActiveFirewall();
+    if (activeFw) {
+      const nameEl = document.getElementById('paloFwName');
+      const modeEl = document.getElementById('paloFwMode');
+      const hostEl = document.getElementById('paloHost');
+      const hostSecEl = document.getElementById('paloHostSecondary');
+      const portEl = document.getElementById('paloPort');
+      const userEl = document.getElementById('paloUser');
+      const passEl = document.getElementById('paloPass');
+
+      if (nameEl) activeFw.name = nameEl.value.trim() || activeFw.name;
+      if (modeEl) activeFw.mode = modeEl.value;
+      if (hostEl) activeFw.host = hostEl.value.trim();
+      if (hostSecEl) activeFw.host_secondary = hostSecEl.value.trim();
+      if (portEl) activeFw.port = parseInt(portEl.value) || 443;
+      if (userEl) activeFw.username = userEl.value.trim();
+      if (passEl) activeFw.password = passEl.value;
+    }
   }
 
   function syncStateToInputs() {
@@ -268,6 +369,30 @@ document.addEventListener('DOMContentLoaded', () => {
       elRemoteAnsibleContainer.style.display = 'block';
     } else {
       elRemoteAnsibleContainer.style.display = 'none';
+    }
+
+    const activeFw = getActiveFirewall();
+    if (activeFw) {
+      const nameEl = document.getElementById('paloFwName');
+      const modeEl = document.getElementById('paloFwMode');
+      const hostEl = document.getElementById('paloHost');
+      const hostSecEl = document.getElementById('paloHostSecondary');
+      const portEl = document.getElementById('paloPort');
+      const userEl = document.getElementById('paloUser');
+      const passEl = document.getElementById('paloPass');
+
+      if (nameEl) nameEl.value = activeFw.name || '';
+      if (modeEl) modeEl.value = activeFw.mode || 'standalone';
+      if (hostEl) hostEl.value = activeFw.host || '';
+      if (hostSecEl) hostSecEl.value = activeFw.host_secondary || '';
+      if (portEl) portEl.value = activeFw.port || 443;
+      if (userEl) userEl.value = activeFw.username || '';
+      if (passEl) passEl.value = activeFw.password || '';
+
+      const secContainer = document.getElementById('paloHostSecondaryContainer');
+      if (secContainer) {
+        secContainer.style.display = activeFw.mode === 'ha-pair' ? 'block' : 'none';
+      }
     }
   }
 
@@ -742,7 +867,7 @@ document.addEventListener('DOMContentLoaded', () => {
       elBtnDeploy.style.display = 'none';
     }
 
-    // 1. Compilevars/network_config.yml preview
+    // 1. Compile vars/network_config.yml preview
     let yamlStr = `nexus_devices:\n`;
     state.devices.forEach(d => {
       // Resolve src_ip and peer_ip if in vPC Domain
@@ -831,31 +956,28 @@ document.addEventListener('DOMContentLoaded', () => {
     // 2. Compile inventory.ini preview dynamically
     const leafs = state.devices.filter(d => d.role && (d.role.includes('leaf') || d.role.includes('primary') || d.role.includes('secondary')));
     
-    if (leafs.length === 0) {
-      elIniContent.textContent = "; Please add switch nodes into the Switch Inventory to compile inventory.ini";
-      return;
-    }
-
-    let iniStr = `[nexus]\n`;
-    leafs.forEach(device => {
-      let peer_ip = "";
-      let src_ip = "";
-      const domain = (state.vpc_domains || []).find(d => d.primary_switch === device.name || d.secondary_switch === device.name);
-      if (domain) {
-        if (domain.primary_switch === device.name) {
-          src_ip = domain.peer_keepalive.primary_ip;
-          peer_ip = domain.peer_keepalive.secondary_ip;
-        } else {
-          src_ip = domain.peer_keepalive.secondary_ip;
-          peer_ip = domain.peer_keepalive.primary_ip;
+    let iniStr = leafs.length === 0 ? "; Please add switch nodes into the Switch Inventory to compile inventory.ini" : `[nexus]\n`;
+    if (leafs.length > 0) {
+      leafs.forEach(device => {
+        let peer_ip = "";
+        let src_ip = "";
+        const domain = (state.vpc_domains || []).find(d => d.primary_switch === device.name || d.secondary_switch === device.name);
+        if (domain) {
+          if (domain.primary_switch === device.name) {
+            src_ip = domain.peer_keepalive.primary_ip;
+            peer_ip = domain.peer_keepalive.secondary_ip;
+          } else {
+            src_ip = domain.peer_keepalive.secondary_ip;
+            peer_ip = domain.peer_keepalive.primary_ip;
+          }
         }
-      }
-      
-      let line = `${device.name} ansible_host=${device.ip}`;
-      if (peer_ip) line += ` peer_ip=${peer_ip}`;
-      if (src_ip) line += ` src_ip=${src_ip}`;
-      iniStr += line + '\n';
-    });
+        
+        let line = `${device.name} ansible_host=${device.ip}`;
+        if (peer_ip) line += ` peer_ip=${peer_ip}`;
+        if (src_ip) line += ` src_ip=${src_ip}`;
+        iniStr += line + '\n';
+      });
+    }
 
     const downstream = state.devices.filter(d => d.role && d.role.includes('downstream'));
     if (downstream.length > 0) {
@@ -884,6 +1006,92 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     elIniContent.textContent = iniStr;
+
+    // 3. Compile Palo Alto vars preview
+    const palo = getActiveFirewall();
+    let paloYaml = `palo_alto_device:\n`;
+    paloYaml += `  name: "${palo?.name || ''}"\n`;
+    paloYaml += `  mode: "${palo?.mode || 'standalone'}"\n`;
+    paloYaml += `  host: "${palo?.host || ''}"\n`;
+    if (palo?.mode === 'ha-pair') {
+      paloYaml += `  host_secondary: "${palo?.host_secondary || ''}"\n`;
+    }
+    paloYaml += `  port: ${palo?.port || 443}\n`;
+    paloYaml += `  username: "${palo?.username || ''}"\n`;
+    
+    paloYaml += `\naddress_objects:\n`;
+    (palo?.address_objects || []).forEach(ao => {
+      paloYaml += `  - name: "${ao.name}"\n`;
+      paloYaml += `    type: "${ao.type}"\n`;
+      paloYaml += `    value: "${ao.value}"\n`;
+    });
+    if (!palo?.address_objects || palo.address_objects.length === 0) {
+      paloYaml += `    []\n`;
+    }
+
+    paloYaml += `\nservice_objects:\n`;
+    (palo?.service_objects || []).forEach(so => {
+      paloYaml += `  - name: "${so.name}"\n`;
+      paloYaml += `    protocol: "${so.protocol}"\n`;
+      paloYaml += `    port: "${so.port}"\n`;
+    });
+    if (!palo?.service_objects || palo.service_objects.length === 0) {
+      paloYaml += `    []\n`;
+    }
+
+    paloYaml += `\nsecurity_rules:\n`;
+    (palo?.security_policies || []).forEach(rule => {
+      paloYaml += `  - name: "${rule.name}"\n`;
+      paloYaml += `    from_zone: "${rule.from_zone}"\n`;
+      paloYaml += `    to_zone: "${rule.to_zone}"\n`;
+      paloYaml += `    source: "${rule.source}"\n`;
+      paloYaml += `    destination: "${rule.destination}"\n`;
+      paloYaml += `    service: "${rule.service}"\n`;
+      paloYaml += `    action: "${rule.action}"\n`;
+    });
+    if (!palo?.security_policies || palo.security_policies.length === 0) {
+      paloYaml += `    []\n`;
+    }
+
+    paloYaml += `\nnat_policies:\n`;
+    (palo?.nat_policies || []).forEach(rule => {
+      paloYaml += `  - name: "${rule.name}"\n`;
+      paloYaml += `    from_zone: "${rule.from_zone}"\n`;
+      paloYaml += `    to_zone: "${rule.to_zone}"\n`;
+      paloYaml += `    source: "${rule.source}"\n`;
+      paloYaml += `    destination: "${rule.destination}"\n`;
+      paloYaml += `    service: "${rule.service}"\n`;
+      paloYaml += `    translated_ip: "${rule.translated_ip}"\n`;
+      paloYaml += `    translated_port: "${rule.translated_port}"\n`;
+    });
+    if (!palo?.nat_policies || palo.nat_policies.length === 0) {
+      paloYaml += `    []\n`;
+    }
+    document.getElementById('paloYamlContent').textContent = paloYaml;
+
+    // 4. Compile Palo Alto set commands preview
+    let paloSet = ``;
+    if (palo?.mode === 'ha-pair') {
+      paloSet += `# HA Pair deployment mode detected. Sync commands should run on the active unit.\n`;
+      paloSet += `# Primary firewall IP: ${palo.host}, Secondary firewall IP: ${palo.host_secondary}\n`;
+    } else {
+      paloSet += `# Standalone deployment mode. Firewall IP: ${palo?.host || ''}\n`;
+    }
+    paloSet += `configure\n`;
+    (palo?.address_objects || []).forEach(ao => {
+      paloSet += `set address ${ao.name} ${ao.type} ${ao.value}\n`;
+    });
+    (palo?.service_objects || []).forEach(so => {
+      paloSet += `set service ${so.name} protocol ${so.protocol} port ${so.port}\n`;
+    });
+    (palo?.security_policies || []).forEach(rule => {
+      paloSet += `set rulebase security rules ${rule.name} from ${rule.from_zone} to ${rule.to_zone} source ${rule.source} destination ${rule.destination} service ${rule.service} action ${rule.action}\n`;
+    });
+    (palo?.nat_policies || []).forEach(rule => {
+      paloSet += `set rulebase nat rules ${rule.name} from ${rule.from_zone} to ${rule.to_zone} source ${rule.source} destination ${rule.destination} service ${rule.service} destination-translation translated-address ${rule.translated_ip} translated-port ${rule.translated_port}\n`;
+    });
+    paloSet += `commit\n`;
+    document.getElementById('paloSetContent').textContent = paloSet;
   }
 
   // --- DYNAMIC VLAN TABLE ---
@@ -1295,9 +1503,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const featuresToDeploy = [];
     if (elDeployVpcBox.checked) featuresToDeploy.push('vpc');
     if (elDeployHsrpBox.checked) featuresToDeploy.push('hsrp');
+    if (document.getElementById('deployPaloBox').checked) featuresToDeploy.push('palo_alto');
 
     if (featuresToDeploy.length === 0) {
-      alert("Please select at least one target module (Deploy vPC or Deploy HSRP) before running!");
+      alert("Please select at least one target module (Deploy vPC, Deploy HSRP, or Deploy Palo Alto Policy) before running!");
       return;
     }
 
@@ -1390,6 +1599,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!state.vlans) state.vlans = [];
       if (!state.downstream_port_channels) state.downstream_port_channels = [];
       if (!state.downstream_svis) state.downstream_svis = [];
+      if (!state.palo_alto) state.palo_alto = { device: { host: '', port: 443, username: '', password: '' }, address_objects: [], service_objects: [], security_policies: [] };
       
       syncStateToInputs();
       renderSwitchGrid();
@@ -1400,6 +1610,20 @@ document.addEventListener('DOMContentLoaded', () => {
       renderVlanTable();
       renderDsPcTable();
       renderDsSviTable();
+      
+      // Palo Alto bindings & renderers
+      const activeFw = getActiveFirewall();
+      if (activeFw && elActiveFwModeBadge) {
+        elActiveFwModeBadge.textContent = activeFw.mode === 'ha-pair' ? 'HA Pair Mode' : 'Standalone Mode';
+      }
+      populateActivePaloSelector();
+      renderPaloDevicesTable();
+      renderAddrObjTable();
+      renderSrvObjTable();
+      renderRuleTable();
+      renderNatRuleTable();
+      populatePolicySelectors();
+      
       updateConfigPreviews();
       
       appendTerminalLine("> Successfully loaded orchestration state from local database.", "system");
@@ -1414,6 +1638,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!state.vlans) state.vlans = [];
       if (!state.downstream_port_channels) state.downstream_port_channels = [];
       if (!state.downstream_svis) state.downstream_svis = [];
+      
+      // Ensure schema compatibility
+      getActiveFirewall();
 
       syncStateToInputs();
       renderSwitchGrid();
@@ -1424,9 +1651,1289 @@ document.addEventListener('DOMContentLoaded', () => {
       renderVlanTable();
       renderDsPcTable();
       renderDsSviTable();
+      
+      // Palo Alto bindings & renderers
+      const activeFwCatch = getActiveFirewall();
+      if (activeFwCatch && elActiveFwModeBadge) {
+        elActiveFwModeBadge.textContent = activeFwCatch.mode === 'ha-pair' ? 'HA Pair Mode' : 'Standalone Mode';
+      }
+      populateActivePaloSelector();
+      renderPaloDevicesTable();
+      renderAddrObjTable();
+      renderSrvObjTable();
+      renderRuleTable();
+      renderNatRuleTable();
+      populatePolicySelectors();
+      
       updateConfigPreviews();
     }
   }
 
+  // --- PALO ALTO FIREWALL EVENT HANDLERS ---
+  const elActivePaloSelector = document.getElementById('activePaloSelector');
+  const elActiveFwModeBadge = document.getElementById('activeFwModeBadge');
+  const elPaloFwName = document.getElementById('paloFwName');
+  const elPaloFwMode = document.getElementById('paloFwMode');
+  const elPaloHostSecondaryContainer = document.getElementById('paloHostSecondaryContainer');
+  const elPaloHostSecondary = document.getElementById('paloHostSecondary');
+  const elBtnSavePaloDevice = document.getElementById('btnSavePaloDevice');
+  const elPaloDevicesTableBody = document.getElementById('paloDevicesTableBody');
+
+  const elPaloHost = document.getElementById('paloHost');
+  const elPaloPort = document.getElementById('paloPort');
+  const elPaloUser = document.getElementById('paloUser');
+  const elPaloPass = document.getElementById('paloPass');
+
+  const elAddrObjName = document.getElementById('addrObjName');
+  const elAddrObjType = document.getElementById('addrObjType');
+  const elAddrObjValue = document.getElementById('addrObjValue');
+  const elBtnAddAddrObj = document.getElementById('btnAddAddrObj');
+  const elAddrObjTableBody = document.getElementById('addrObjTableBody');
+
+  const elSrvObjName = document.getElementById('srvObjName');
+  const elSrvObjProto = document.getElementById('srvObjProto');
+  const elSrvObjPort = document.getElementById('srvObjPort');
+  const elBtnAddSrvObj = document.getElementById('btnAddSrvObj');
+  const elSrvObjTableBody = document.getElementById('srvObjTableBody');
+
+  const elRuleName = document.getElementById('ruleName');
+  const elRuleAction = document.getElementById('ruleAction');
+  const elRuleFromZone = document.getElementById('ruleFromZone');
+  const elRuleToZone = document.getElementById('ruleToZone');
+  const elRuleSrcAddrSelect = document.getElementById('ruleSrcAddrSelect');
+  const elRuleDstAddrSelect = document.getElementById('ruleDstAddrSelect');
+  const elRuleSrvSelect = document.getElementById('ruleSrvSelect');
+  const elBtnAddRule = document.getElementById('btnAddRule');
+  const elRuleTableBody = document.getElementById('ruleTableBody');
+
+  const elNatRuleName = document.getElementById('natRuleName');
+  const elNatFromZone = document.getElementById('natFromZone');
+  const elNatToZone = document.getElementById('natToZone');
+  const elNatSrcAddrSelect = document.getElementById('natSrcAddrSelect');
+  const elNatDstAddrSelect = document.getElementById('natDstAddrSelect');
+  const elNatSrvSelect = document.getElementById('natSrvSelect');
+  const elNatTransIp = document.getElementById('natTransIp');
+  const elNatTransPort = document.getElementById('natTransPort');
+  const elBtnAddNatRule = document.getElementById('btnAddNatRule');
+  const elNatTableBody = document.getElementById('natTableBody');
+
+  const elPaloYamlContent = document.getElementById('paloYamlContent');
+  const elPaloSetContent = document.getElementById('paloSetContent');
+
+  // Sync inputs on change
+  [
+    elPaloFwName, elPaloFwMode, elPaloHost, elPaloHostSecondary,
+    elPaloPort, elPaloUser, elPaloPass
+  ].forEach(el => {
+    if (el) {
+      el.addEventListener('change', () => {
+        syncInputsToState();
+        updateConfigPreviews();
+      });
+      el.addEventListener('input', () => {
+        syncInputsToState();
+        updateConfigPreviews();
+      });
+    }
+  });
+
+  if (elPaloFwMode) {
+    elPaloFwMode.addEventListener('change', () => {
+      const mode = elPaloFwMode.value;
+      const secContainer = document.getElementById('paloHostSecondaryContainer');
+      if (secContainer) {
+        secContainer.style.display = mode === 'ha-pair' ? 'block' : 'none';
+      }
+      syncInputsToState();
+      updateConfigPreviews();
+    });
+  }
+
+  if (elActivePaloSelector) {
+    elActivePaloSelector.addEventListener('change', () => {
+      const id = elActivePaloSelector.value;
+      state.palo_alto.activeDeviceId = id;
+      
+      const activeFw = getActiveFirewall();
+      if (activeFw && elActiveFwModeBadge) {
+        elActiveFwModeBadge.textContent = activeFw.mode === 'ha-pair' ? 'HA Pair Mode' : 'Standalone Mode';
+      }
+
+      syncStateToInputs();
+      renderPaloDevicesTable();
+      renderAddrObjTable();
+      renderSrvObjTable();
+      renderRuleTable();
+      renderNatRuleTable();
+      populatePolicySelectors();
+      updateConfigPreviews();
+    });
+  }
+
+  if (elBtnSavePaloDevice) {
+    elBtnSavePaloDevice.addEventListener('click', () => {
+      const name = elPaloFwName.value.trim() || `Firewall-${Date.now().toString().slice(-4)}`;
+      const mode = elPaloFwMode.value;
+      const host = elPaloHost.value.trim();
+      const host_secondary = elPaloHostSecondary.value.trim();
+      const port = parseInt(elPaloPort.value) || 443;
+      const username = elPaloUser.value.trim();
+      const password = elPaloPass.value;
+
+      if (!host) {
+        alert("Please enter Firewall Primary management IP.");
+        return;
+      }
+      if (mode === 'ha-pair' && !host_secondary) {
+        alert("Please enter Secondary management IP for HA Pair.");
+        return;
+      }
+
+      // Find if device with same name already exists
+      let existing = state.palo_alto.devices.find(d => d.name.toLowerCase() === name.toLowerCase());
+      if (existing) {
+        existing.mode = mode;
+        existing.host = host;
+        existing.host_secondary = host_secondary;
+        existing.port = port;
+        existing.username = username;
+        if (password) existing.password = password;
+        alert(`Updated configuration for existing firewall device "${name}".`);
+      } else {
+        const newFw = {
+          id: Date.now().toString(),
+          name,
+          mode,
+          host,
+          host_secondary,
+          port,
+          username,
+          password,
+          address_objects: [],
+          service_objects: [],
+          security_policies: [],
+          nat_policies: []
+        };
+        state.palo_alto.devices.push(newFw);
+        state.palo_alto.activeDeviceId = newFw.id;
+        alert(`Saved and switched to new firewall device target "${name}".`);
+      }
+
+      const activeFw = getActiveFirewall();
+      if (activeFw && elActiveFwModeBadge) {
+        elActiveFwModeBadge.textContent = activeFw.mode === 'ha-pair' ? 'HA Pair Mode' : 'Standalone Mode';
+      }
+
+      syncStateToInputs();
+      populateActivePaloSelector();
+      renderPaloDevicesTable();
+      renderAddrObjTable();
+      renderSrvObjTable();
+      renderRuleTable();
+      renderNatRuleTable();
+      populatePolicySelectors();
+      updateConfigPreviews();
+    });
+  }
+
+  // Render Address Objects
+  // Render Address Objects
+  function renderAddrObjTable() {
+    if (!elAddrObjTableBody) return;
+    elAddrObjTableBody.innerHTML = '';
+    const activeFw = getActiveFirewall();
+    const objects = activeFw?.address_objects || [];
+
+    if (objects.length === 0) {
+      elAddrObjTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--text-muted);font-style:italic;">No Address Objects.</td></tr>`;
+      return;
+    }
+
+    objects.forEach((ao, idx) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="font-weight:600;">${ao.name}</td>
+        <td><span class="zone-badge">${ao.type}</span></td>
+        <td><code style="font-family:var(--font-mono);">${ao.value}</code></td>
+        <td style="text-align:center;"><button type="button" class="btn-delete" data-addr-idx="${idx}">Delete</button></td>
+      `;
+      elAddrObjTableBody.appendChild(tr);
+    });
+
+    elAddrObjTableBody.querySelectorAll('.btn-delete').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.getAttribute('data-addr-idx'));
+        const activeFw = getActiveFirewall();
+        if (activeFw && activeFw.address_objects) {
+          activeFw.address_objects.splice(idx, 1);
+          renderAddrObjTable();
+          populatePolicySelectors();
+          updateConfigPreviews();
+        }
+      });
+    });
+  }
+
+  // Render Service Objects
+  function renderSrvObjTable() {
+    if (!elSrvObjTableBody) return;
+    elSrvObjTableBody.innerHTML = '';
+    const activeFw = getActiveFirewall();
+    const objects = activeFw?.service_objects || [];
+
+    if (objects.length === 0) {
+      elSrvObjTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--text-muted);font-style:italic;">No Service Objects.</td></tr>`;
+      return;
+    }
+
+    objects.forEach((so, idx) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="font-weight:600;">${so.name}</td>
+        <td><span class="zone-badge">${so.protocol.toUpperCase()}</span></td>
+        <td><code style="font-family:var(--font-mono);">${so.port}</code></td>
+        <td style="text-align:center;"><button type="button" class="btn-delete" data-srv-idx="${idx}">Delete</button></td>
+      `;
+      elSrvObjTableBody.appendChild(tr);
+    });
+
+    elSrvObjTableBody.querySelectorAll('.btn-delete').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.getAttribute('data-srv-idx'));
+        const activeFw = getActiveFirewall();
+        if (activeFw && activeFw.service_objects) {
+          activeFw.service_objects.splice(idx, 1);
+          renderSrvObjTable();
+          populatePolicySelectors();
+          updateConfigPreviews();
+        }
+      });
+    });
+  }
+
+  // Populate dynamic policy dropdown selectors
+  function populatePolicySelectors() {
+    const elRuleSrcAddrSelect = document.getElementById('ruleSrcAddrSelect');
+    const elRuleDstAddrSelect = document.getElementById('ruleDstAddrSelect');
+    const elRuleSrvSelect = document.getElementById('ruleSrvSelect');
+
+    const elNatSrcAddrSelect = document.getElementById('natSrcAddrSelect');
+    const elNatDstAddrSelect = document.getElementById('natDstAddrSelect');
+    const elNatSrvSelect = document.getElementById('natSrvSelect');
+
+    if (!elRuleSrcAddrSelect || !elRuleDstAddrSelect || !elRuleSrvSelect) return;
+    
+    const srcCurrent = elRuleSrcAddrSelect.value;
+    const dstCurrent = elRuleDstAddrSelect.value;
+    const srvCurrent = elRuleSrvSelect.value;
+
+    const natSrcCurrent = elNatSrcAddrSelect ? elNatSrcAddrSelect.value : 'any';
+    const natDstCurrent = elNatDstAddrSelect ? elNatDstAddrSelect.value : 'any';
+    const natSrvCurrent = elNatSrvSelect ? elNatSrvSelect.value : 'any';
+
+    elRuleSrcAddrSelect.innerHTML = '<option value="any">any</option>';
+    elRuleDstAddrSelect.innerHTML = '<option value="any">any</option>';
+    elRuleSrvSelect.innerHTML = '<option value="any">any</option>';
+
+    if (elNatSrcAddrSelect) elNatSrcAddrSelect.innerHTML = '<option value="any">any</option>';
+    if (elNatDstAddrSelect) elNatDstAddrSelect.innerHTML = '<option value="any">any</option>';
+    if (elNatSrvSelect) elNatSrvSelect.innerHTML = '<option value="any">any</option>';
+
+    const activeFw = getActiveFirewall();
+    const addrs = activeFw?.address_objects || [];
+    addrs.forEach(ao => {
+      const opt1 = document.createElement('option');
+      opt1.value = ao.name;
+      opt1.textContent = ao.name;
+      elRuleSrcAddrSelect.appendChild(opt1);
+
+      const opt2 = document.createElement('option');
+      opt2.value = ao.name;
+      opt2.textContent = ao.name;
+      elRuleDstAddrSelect.appendChild(opt2);
+
+      if (elNatSrcAddrSelect) {
+        const optNat1 = document.createElement('option');
+        optNat1.value = ao.name;
+        optNat1.textContent = ao.name;
+        elNatSrcAddrSelect.appendChild(optNat1);
+      }
+      if (elNatDstAddrSelect) {
+        const optNat2 = document.createElement('option');
+        optNat2.value = ao.name;
+        optNat2.textContent = ao.name;
+        elNatDstAddrSelect.appendChild(optNat2);
+      }
+    });
+
+    const srvs = activeFw?.service_objects || [];
+    srvs.forEach(so => {
+      const opt = document.createElement('option');
+      opt.value = so.name;
+      opt.textContent = `${so.name} (${so.protocol.toUpperCase()}/${so.port})`;
+      elRuleSrvSelect.appendChild(opt);
+
+      if (elNatSrvSelect) {
+        const optNat = document.createElement('option');
+        optNat.value = so.name;
+        optNat.textContent = `${so.name} (${so.protocol.toUpperCase()}/${so.port})`;
+        elNatSrvSelect.appendChild(optNat);
+      }
+    });
+
+    elRuleSrcAddrSelect.value = srcCurrent;
+    elRuleDstAddrSelect.value = dstCurrent;
+    elRuleSrvSelect.value = srvCurrent;
+
+    if (elNatSrcAddrSelect) elNatSrcAddrSelect.value = natSrcCurrent;
+    if (elNatDstAddrSelect) elNatDstAddrSelect.value = natDstCurrent;
+    if (elNatSrvSelect) elNatSrvSelect.value = natSrvCurrent;
+  }
+
+  // Render Access Policies
+  function renderRuleTable() {
+    if (!elRuleTableBody) return;
+    elRuleTableBody.innerHTML = '';
+    const activeFw = getActiveFirewall();
+    const rules = activeFw?.security_policies || [];
+
+    if (rules.length === 0) {
+      elRuleTableBody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);font-style:italic;">No Security Rules Configured.</td></tr>`;
+      return;
+    }
+
+    rules.forEach((rule, idx) => {
+      const actionBadge = rule.action === 'allow' ? '<span class="badge-allow">Allow</span>' : '<span class="badge-deny">Deny</span>';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="font-weight:600;">${rule.name}</td>
+        <td>
+          <div style="display:flex;flex-direction:column;gap:2px;">
+            <span>From: <span class="zone-badge">${rule.from_zone}</span></span>
+            <span>To: <span class="zone-badge">${rule.to_zone}</span></span>
+          </div>
+        </td>
+        <td>
+          <div style="display:flex;flex-direction:column;gap:2px;font-family:var(--font-mono);font-size:0.75rem;">
+            <span>Src: <strong>${rule.source}</strong></span>
+            <span>Dst: <strong>${rule.destination}</strong></span>
+          </div>
+        </td>
+        <td><span class="zone-badge">${rule.service}</span></td>
+        <td>${actionBadge}</td>
+        <td style="text-align:center;"><button type="button" class="btn-delete" data-rule-idx="${idx}">Delete</button></td>
+      `;
+      elRuleTableBody.appendChild(tr);
+    });
+
+    elRuleTableBody.querySelectorAll('.btn-delete').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.getAttribute('data-rule-idx'));
+        const activeFw = getActiveFirewall();
+        if (activeFw && activeFw.security_policies) {
+          activeFw.security_policies.splice(idx, 1);
+          renderRuleTable();
+          updateConfigPreviews();
+        }
+      });
+    });
+  }
+
+  // Render NAT Policies Table
+  function renderNatRuleTable() {
+    const elNatTableBody = document.getElementById('natTableBody');
+    if (!elNatTableBody) return;
+    elNatTableBody.innerHTML = '';
+    
+    const activeFw = getActiveFirewall();
+    const rules = activeFw?.nat_policies || [];
+
+    if (rules.length === 0) {
+      elNatTableBody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--text-muted);font-style:italic;">No NAT Rules Configured.</td></tr>`;
+      return;
+    }
+
+    rules.forEach((rule, idx) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="font-weight:600;">${rule.name}</td>
+        <td>
+          <div style="display:flex;flex-direction:column;gap:2px;">
+            <span>From: <span class="zone-badge">${rule.from_zone}</span></span>
+            <span>To: <span class="zone-badge">${rule.to_zone}</span></span>
+          </div>
+        </td>
+        <td>
+          <div style="display:flex;flex-direction:column;gap:2px;font-family:var(--font-mono);font-size:0.75rem;">
+            <span>Src: <strong>${rule.source}</strong></span>
+            <span>Dst: <strong>${rule.destination}</strong></span>
+            <span>Port: <strong>${rule.service}</strong></span>
+          </div>
+        </td>
+        <td>
+          <div style="display:flex;flex-direction:column;gap:2px;font-family:var(--font-mono);font-size:0.75rem;">
+            <span>IP: <strong>${rule.translated_ip}</strong></span>
+            <span>Port: <strong>${rule.translated_port}</strong></span>
+          </div>
+        </td>
+        <td style="text-align:center;"><button type="button" class="btn-delete" data-nat-idx="${idx}">Delete</button></td>
+      `;
+      elNatTableBody.appendChild(tr);
+    });
+
+    elNatTableBody.querySelectorAll('.btn-delete').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.getAttribute('data-nat-idx'));
+        const activeFw = getActiveFirewall();
+        if (activeFw && activeFw.nat_policies) {
+          activeFw.nat_policies.splice(idx, 1);
+          renderNatRuleTable();
+          updateConfigPreviews();
+        }
+      });
+    });
+  }
+
+  // Add Address Object Handler
+  if (elBtnAddAddrObj) {
+    elBtnAddAddrObj.addEventListener('click', () => {
+      const name = elAddrObjName.value.trim().replace(/\s+/g, '_');
+      const type = elAddrObjType.value;
+      const value = elAddrObjValue.value.trim();
+
+      if (!name) {
+        alert("Please enter Address Object Name.");
+        return;
+      }
+      if (!value) {
+        alert("Please enter Address Object Value.");
+        return;
+      }
+
+      if (!state.palo_alto.address_objects) state.palo_alto.address_objects = [];
+      if (state.palo_alto.address_objects.some(ao => ao.name === name)) {
+        alert(`Address Object "${name}" already exists.`);
+        return;
+      }
+
+      state.palo_alto.address_objects.push({ name, type, value });
+      elAddrObjName.value = '';
+      elAddrObjValue.value = '';
+
+      renderAddrObjTable();
+      populatePolicySelectors();
+      updateConfigPreviews();
+    });
+  }
+
+  // Add Service Object Handler
+  if (elBtnAddSrvObj) {
+    elBtnAddSrvObj.addEventListener('click', () => {
+      const name = elSrvObjName.value.trim().replace(/\s+/g, '_');
+      const protocol = elSrvObjProto.value;
+      const port = elSrvObjPort.value.trim();
+
+      if (!name) {
+        alert("Please enter Service Object Name.");
+        return;
+      }
+      if (!port) {
+        alert("Please enter Destination Port.");
+        return;
+      }
+
+      if (!state.palo_alto.service_objects) state.palo_alto.service_objects = [];
+      if (state.palo_alto.service_objects.some(so => so.name === name)) {
+        alert(`Service Object "${name}" already exists.`);
+        return;
+      }
+
+      state.palo_alto.service_objects.push({ name, protocol, port });
+      elSrvObjName.value = '';
+      elSrvObjPort.value = '';
+
+      renderSrvObjTable();
+      populatePolicySelectors();
+      updateConfigPreviews();
+    });
+  }
+
+  // Add Rule Handler
+  if (elBtnAddRule) {
+    elBtnAddRule.addEventListener('click', () => {
+      const name = elRuleName.value.trim().replace(/\s+/g, '_');
+      const action = elRuleAction.value;
+      const from_zone = elRuleFromZone.value.trim() || 'any';
+      const to_zone = elRuleToZone.value.trim() || 'any';
+      const source = elRuleSrcAddrSelect.value;
+      const destination = elRuleDstAddrSelect.value;
+      const service = elRuleSrvSelect.value;
+
+      if (!name) {
+        alert("Please enter Rule Name.");
+        return;
+      }
+
+      if (!state.palo_alto.security_policies) state.palo_alto.security_policies = [];
+      if (state.palo_alto.security_policies.some(r => r.name === name)) {
+        alert(`Rule "${name}" already exists.`);
+        return;
+      }
+
+      state.palo_alto.security_policies.push({
+        name, action, from_zone, to_zone, source, destination, service
+      });
+
+      elRuleName.value = '';
+      elRuleFromZone.value = '';
+      elRuleToZone.value = '';
+      elRuleSrcAddrSelect.value = 'any';
+      elRuleDstAddrSelect.value = 'any';
+      elRuleSrvSelect.value = 'any';
+
+      renderRuleTable();
+      updateConfigPreviews();
+    });
+  }
+
+  // --- PALO ALTO POLICY AUDIT EVENT HANDLERS ---
+  const elPaloAuditSource = document.getElementById('paloAuditSource');
+  const elBtnRunPaloAudit = document.getElementById('btnRunPaloAudit');
+  const elBtnDownloadPaloAuditCsv = document.getElementById('btnDownloadPaloAuditCsv');
+  const elPaloAuditStatus = document.getElementById('paloAuditStatus');
+  const elPaloAuditScorePanel = document.getElementById('paloAuditScorePanel');
+  
+  const elPaloAuditGrade = document.getElementById('paloAuditGrade');
+  const elPaloAuditScore = document.getElementById('paloAuditScore');
+  
+  const elPaloStatUnused = document.getElementById('paloStatUnused');
+  const elPaloStatBroad = document.getElementById('paloStatBroad');
+  const elPaloStatLegacy = document.getElementById('paloStatLegacy');
+  const elPaloStatRedundant = document.getElementById('paloStatRedundant');
+  
+  const elPaloAuditTableContainer = document.getElementById('paloAuditTableContainer');
+  const elPaloAuditTableBody = document.getElementById('paloAuditTableBody');
+  
+  const elPaloRemediationContainer = document.getElementById('paloRemediationContainer');
+  const elPaloRemediationCli = document.getElementById('paloRemediationCli');
+  const elBtnCopyPaloRemediation = document.getElementById('btnCopyPaloRemediation');
+
+  let activeAuditFindings = [];
+
+  if (elBtnRunPaloAudit) {
+    elBtnRunPaloAudit.addEventListener('click', async () => {
+      const source = elPaloAuditSource.value;
+      const activeFw = getActiveFirewall();
+      const host = activeFw?.host || '';
+      const port = activeFw?.port || 443;
+      const username = activeFw?.username || '';
+      const password = activeFw?.password || '';
+
+      if (source === 'live') {
+        if (!host) {
+          alert("Please enter Firewall IP Address / Hostname in the credentials card.");
+          return;
+        }
+        if (!username || !password) {
+          alert("Please enter Username and Password in the credentials card.");
+          return;
+        }
+      }
+
+      elBtnRunPaloAudit.disabled = true;
+      elBtnRunPaloAudit.textContent = "Auditing...";
+      
+      elPaloAuditStatus.style.display = 'block';
+      elPaloAuditStatus.textContent = source === 'live' 
+        ? `Connecting to Palo Alto Firewall at https://${host}:${port}...\nAuthenticating admin user...\nFetching XML security rules and traffic logs...\nRunning policy hit analyzer and shadowed rules validation...\nAudit completed successfully.`
+        : `Scanning current GUI Policy Matrix (found ${activeFw?.security_policies?.length || 0} security rules and ${activeFw?.nat_policies?.length || 0} NAT rules)...`;
+
+      try {
+        const res = await fetch('/api/paloalto/audit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            host, port, username, password, source,
+            mode: activeFw?.mode || 'standalone',
+            host_secondary: activeFw?.host_secondary || '',
+            rules: activeFw?.security_policies || [],
+            nat_policies: activeFw?.nat_policies || []
+          })
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+          activeAuditFindings = data.findings;
+          
+          elPaloAuditScorePanel.style.display = 'block';
+          elPaloAuditGrade.textContent = data.grade;
+          elPaloAuditScore.textContent = `Score: ${data.score}/100`;
+          
+          elPaloStatUnused.textContent = data.stats.unused;
+          elPaloStatBroad.textContent = data.stats.broad;
+          elPaloStatLegacy.textContent = data.stats.legacy;
+          elPaloStatRedundant.textContent = data.stats.redundant;
+          
+          if (data.score >= 90) elPaloAuditGrade.style.color = '#10b981';
+          else if (data.score >= 70) elPaloAuditGrade.style.color = '#f59e0b';
+          else elPaloAuditGrade.style.color = '#ef4444';
+
+          elPaloAuditTableContainer.style.display = 'block';
+          elPaloAuditTableBody.innerHTML = '';
+          
+          if (data.findings.length === 0) {
+            elPaloAuditTableBody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);font-style:italic;">No security risks or compliance issues detected! Rule configuration is clean.</td></tr>`;
+          } else {
+            data.findings.forEach(f => {
+              const tr = document.createElement('tr');
+              let riskClass = '';
+              if (f.risk.includes('❌') || f.risk.includes('Critical')) riskClass = 'style="color:#ef4444;font-weight:600;"';
+              else if (f.risk.includes('⚠️')) riskClass = 'style="color:#f59e0b;font-weight:600;"';
+              
+              tr.innerHTML = `
+                <td style="font-weight:600;">${f.name}</td>
+                <td><code style="font-family:var(--font-mono);">${f.src_dst}</code></td>
+                <td><code style="font-family:var(--font-mono);">${f.service}</code></td>
+                <td><span style="font-family:var(--font-sans);font-weight:500;">${f.hits}</span></td>
+                <td ${riskClass}>${f.risk}</td>
+                <td style="font-size:0.72rem;line-height:1.3;color:var(--text-muted);">${f.recommendation}</td>
+              `;
+              elPaloAuditTableBody.appendChild(tr);
+            });
+          }
+
+          elPaloRemediationContainer.style.display = 'block';
+          elPaloRemediationCli.value = data.cli;
+
+          elBtnDownloadPaloAuditCsv.disabled = false;
+          elPaloAuditStatus.textContent = source === 'live' 
+            ? `✅ Live audit completed. Security Grade: ${data.grade} (${data.score}/100) - ${data.findings.length} findings flagged.`
+            : `✅ GUI Policy Matrix audit completed. Security Grade: ${data.grade} (${data.score}/100) - ${data.findings.length} findings flagged.`;
+        } else {
+          throw new Error(data.error || "Failed to complete audit.");
+        }
+      } catch (err) {
+        alert(`❌ Policy Audit failed: ${err.message}`);
+        elPaloAuditStatus.textContent = `❌ Audit Error: ${err.message}`;
+      } finally {
+        elBtnRunPaloAudit.disabled = false;
+        elBtnRunPaloAudit.textContent = "⚡ Run Security Audit";
+      }
+    });
+  }
+
+  if (elBtnDownloadPaloAuditCsv) {
+    elBtnDownloadPaloAuditCsv.addEventListener('click', () => {
+      if (!activeAuditFindings || activeAuditFindings.length === 0) {
+        alert("No audit results to export.");
+        return;
+      }
+      
+      const headers = ['Rule Name', 'Source/Dest IP', 'Ports/Services', 'Last Hit Timeline', 'Security Risk', 'Recommendation'];
+      const rows = activeAuditFindings.map(f => [
+        `"${f.name}"`,
+        `"${f.src_dst.replace(/➡️/g, '->')}"`,
+        `"${f.service}"`,
+        `"${f.hits.replace(/⚠️/g, '')}"`,
+        `"${f.risk.replace(/⚠️|❌/g, '').trim()}"`,
+        `"${f.recommendation.replace(/"/g, '""')}"`
+      ]);
+      
+      const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `palo_alto_security_audit_${Date.now()}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+  }
+
+  if (elBtnCopyPaloRemediation) {
+    elBtnCopyPaloRemediation.addEventListener('click', () => {
+      if (!elPaloRemediationCli.value || elPaloRemediationCli.value.trim() === '') return;
+      navigator.clipboard.writeText(elPaloRemediationCli.value).then(() => {
+        elBtnCopyPaloRemediation.textContent = "✅ Copied!";
+        setTimeout(() => {
+          elBtnCopyPaloRemediation.textContent = "📋 Copy CLI";
+        }, 1500);
+      }).catch(err => {
+        console.error("Failed to copy remediation commands: ", err);
+      });
+    });
+  }
+
+  // --- RAG COPILOT & ASSISTANT SYSTEM HANDLERS ---
+  const elCopilotProvider = document.getElementById('copilotProvider');
+  const elCopilotModel = document.getElementById('copilotModel');
+  const elCopilotApiKey = document.getElementById('copilotApiKey');
+  const elApiKeyContainer = document.getElementById('apiKeyContainer');
+  const elChromaEndpoint = document.getElementById('chromaEndpoint');
+  const elKbSelector = document.getElementById('kbSelector');
+
+  const elBtnIndexKb = document.getElementById('btnIndexKb');
+  const elBtnCheckKbStatus = document.getElementById('btnCheckKbStatus');
+  const elBtnStartChroma = document.getElementById('btnStartChroma');
+  const elCustomChunkContent = document.getElementById('customChunkContent');
+  const elBtnAddChunk = document.getElementById('btnAddChunk');
+
+  // PDF Uploader elements
+  const elPdfUploadZone = document.getElementById('pdfUploadZone');
+  const elPdfFileInput = document.getElementById('pdfFileInput');
+  const elPdfFileInfo = document.getElementById('pdfFileInfo');
+  const elPdfFileName = elPdfFileInfo ? elPdfFileInfo.querySelector('.file-name') : null;
+  const elBtnCancelPdf = document.getElementById('btnCancelPdf');
+  const elBtnConvertPdf = document.getElementById('btnConvertPdf');
+  const elPdfUploadProgress = document.getElementById('pdfUploadProgress');
+  const elPdfProgressBar = document.getElementById('pdfProgressBar');
+  const elPdfUploadStatus = document.getElementById('pdfUploadStatus');
+
+  const elChatWindow = document.getElementById('chatWindow');
+  const elChatUseRag = document.getElementById('chatUseRag');
+  const elChatIncludeGui = document.getElementById('chatIncludeGui');
+  const elChatIncludeFiles = document.getElementById('chatIncludeFiles');
+  const elCopilotInput = document.getElementById('copilotInput');
+  const elBtnSendChat = document.getElementById('btnSendChat');
+  const elRagContextPreview = document.getElementById('ragContextPreview');
+  const elBtnAnalyzeError = document.getElementById('btnAnalyzeError');
+
+  let selectedPdfFile = null;
+
+  // --- AI PDF UPLOADER & CONVERTER EVENT HANDLERS ---
+  if (elPdfUploadZone && elPdfFileInput) {
+    elPdfUploadZone.addEventListener('click', () => elPdfFileInput.click());
+    
+    elPdfFileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        handlePdfSelection(e.target.files[0]);
+      }
+    });
+
+    elPdfUploadZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      elPdfUploadZone.classList.add('drag-over');
+    });
+
+    elPdfUploadZone.addEventListener('dragleave', () => {
+      elPdfUploadZone.classList.remove('drag-over');
+    });
+
+    elPdfUploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      elPdfUploadZone.classList.remove('drag-over');
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        const file = e.dataTransfer.files[0];
+        if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+          handlePdfSelection(file);
+        } else {
+          alert("Please upload a PDF file only.");
+        }
+      }
+    });
+  }
+
+  function handlePdfSelection(file) {
+    selectedPdfFile = file;
+    if (elPdfFileName) elPdfFileName.textContent = file.name;
+    if (elPdfFileInfo) elPdfFileInfo.style.display = 'flex';
+    if (elPdfUploadZone) elPdfUploadZone.style.display = 'none';
+    if (elBtnConvertPdf) elBtnConvertPdf.disabled = false;
+  }
+
+  if (elBtnCancelPdf) {
+    elBtnCancelPdf.addEventListener('click', () => {
+      selectedPdfFile = null;
+      if (elPdfFileInput) elPdfFileInput.value = '';
+      if (elPdfFileInfo) elPdfFileInfo.style.display = 'none';
+      if (elPdfUploadZone) elPdfUploadZone.style.display = 'flex';
+      if (elBtnConvertPdf) elBtnConvertPdf.disabled = true;
+      if (elPdfUploadProgress) elPdfUploadProgress.style.display = 'none';
+      if (elPdfProgressBar) elPdfProgressBar.style.width = '0%';
+    });
+  }
+
+  if (elBtnConvertPdf) {
+    elBtnConvertPdf.addEventListener('click', async () => {
+      if (!selectedPdfFile) return;
+
+      elBtnConvertPdf.disabled = true;
+      if (elBtnCancelPdf) elBtnCancelPdf.disabled = true;
+      if (elPdfUploadProgress) elPdfUploadProgress.style.display = 'block';
+      if (elPdfProgressBar) elPdfProgressBar.style.width = '10%';
+      if (elPdfUploadStatus) elPdfUploadStatus.textContent = "Extracting text from PDF...";
+
+      const formData = new FormData();
+      formData.append('file', selectedPdfFile);
+      formData.append('kb', elKbSelector.value);
+      formData.append('provider', elCopilotProvider.value);
+      formData.append('model', elCopilotModel.value.trim());
+      formData.append('apiKey', elCopilotApiKey.value);
+      formData.append('chroma', elChromaEndpoint.value.trim());
+
+      let progress = 10;
+      const progressInterval = setInterval(() => {
+        if (progress < 85) {
+          progress += Math.floor(Math.random() * 5) + 2;
+          if (elPdfProgressBar) elPdfProgressBar.style.width = `${progress}%`;
+          if (elPdfUploadStatus) {
+            if (progress > 25 && progress <= 55) {
+              elPdfUploadStatus.textContent = "AI re-structuring guide text to Markdown...";
+            } else if (progress > 55) {
+              elPdfUploadStatus.textContent = "Writing and indexing segments into vector KB...";
+            }
+          }
+        }
+      }, 1500);
+
+      try {
+        const res = await fetch('/api/kb/upload-pdf', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        
+        clearInterval(progressInterval);
+
+        if (res.ok) {
+          if (elPdfProgressBar) elPdfProgressBar.style.width = '100%';
+          if (elPdfUploadStatus) elPdfUploadStatus.textContent = "✅ Indexed Successfully!";
+          alert(`🎉 Successfully processed PDF guide!\n\nDocument: ${data.filename}\nPages read: ${data.pages}\nIngestion Mode: ${data.mode}\n\nChromaDB has been re-indexed. You can now chat about this document!`);
+          
+          appendChatMessage('assistant', `📚 **I have imported and indexed a new network guide!**\n\n* **Document Name:** \`${data.filename}\`\n* **Pages processed:** ${data.pages}\n* **Import Mode:** ${data.mode}\n\nI chunked the document and populated your RAG database. You can ask me technical questions or config generation playbooks based on this document immediately.`);
+          
+          setTimeout(() => {
+            selectedPdfFile = null;
+            if (elPdfFileInput) elPdfFileInput.value = '';
+            if (elPdfFileInfo) elPdfFileInfo.style.display = 'none';
+            if (elPdfUploadZone) elPdfUploadZone.style.display = 'flex';
+            if (elBtnConvertPdf) elBtnConvertPdf.disabled = true;
+            if (elBtnCancelPdf) elBtnCancelPdf.disabled = false;
+            if (elPdfUploadProgress) elPdfUploadProgress.style.display = 'none';
+            if (elPdfProgressBar) elPdfProgressBar.style.width = '0%';
+          }, 3000);
+        } else {
+          throw new Error(data.error || "Failed to convert PDF.");
+        }
+      } catch (err) {
+        clearInterval(progressInterval);
+        if (elPdfProgressBar) elPdfProgressBar.style.width = '0%';
+        if (elPdfUploadStatus) elPdfUploadStatus.textContent = "❌ Conversion Failed";
+        alert(`❌ PDF Conversion & Indexing Failed:\n\n${err.message}`);
+        elBtnConvertPdf.disabled = false;
+        if (elBtnCancelPdf) elBtnCancelPdf.disabled = false;
+      }
+    });
+  }
+
+  // Toggle API Key field visibility
+  if (elCopilotProvider) {
+    elCopilotProvider.addEventListener('change', () => {
+      const provider = elCopilotProvider.value;
+      if (provider === 'gemini' || provider === 'openrouter') {
+        elApiKeyContainer.style.display = 'block';
+        if (provider === 'gemini') {
+          elCopilotModel.value = 'gemini-2.5-flash';
+        } else {
+          elCopilotModel.value = 'anthropic/claude-3.5-sonnet';
+        }
+      } else {
+        elApiKeyContainer.style.display = 'none';
+        elCopilotModel.value = 'qwen2.5:7b';
+      }
+    });
+  }
+
+  // Check Knowledge Base Reachability Status
+  if (elBtnCheckKbStatus) {
+    elBtnCheckKbStatus.addEventListener('click', async () => {
+      const chroma = elChromaEndpoint.value.trim();
+      const kb = elKbSelector.value;
+      
+      elBtnCheckKbStatus.disabled = true;
+      elBtnCheckKbStatus.textContent = "Checking...";
+
+      try {
+        const res = await fetch(`/api/kb/status?chroma=${encodeURIComponent(chroma)}&kb=${kb}`);
+        const data = await res.json();
+        
+        if (data.connected) {
+          alert(`✅ Vector database connected successfully!\n\nChromaDB Status: Reachable\nCollection: ${data.collection}\nDocument chunks count: ${data.count}\nFallback Mode: No (Using ChromaDB)`);
+        } else {
+          alert(`⚠️ Vector database connected in Fallback mode!\n\nChromaDB Status: Unreachable (Offline)\nCollection: ${data.collection}\nFallback JSON path: database/kb_store.json\nDocument chunks count: ${data.count}\nFallback Mode: Yes (Local search active)`);
+        }
+      } catch (err) {
+        alert(`❌ Connection check failed: ${err.message}`);
+      } finally {
+        elBtnCheckKbStatus.disabled = false;
+        elBtnCheckKbStatus.textContent = "🔌 Status";
+      }
+    });
+  }
+
+  // Start ChromaDB Service locally
+  if (elBtnStartChroma) {
+    elBtnStartChroma.addEventListener('click', async () => {
+      const endpoint = elChromaEndpoint.value.trim() || 'http://localhost:8000';
+      elBtnStartChroma.disabled = true;
+      elBtnStartChroma.textContent = "⚡ Starting...";
+      
+      appendTerminalLine(`\n> Attempting to launch ChromaDB service locally...`, "system");
+      
+      try {
+        const res = await fetch('/api/chromadb/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chroma: endpoint })
+        });
+        const data = await res.json();
+        
+        if (res.ok && data.success) {
+          appendTerminalLine(`> Success: ${data.message}`, "success");
+          alert(`🎉 ${data.message}`);
+          
+          if (elBtnCheckKbStatus) elBtnCheckKbStatus.click();
+        } else {
+          throw new Error(data.error || "Failed to start ChromaDB service.");
+        }
+      } catch (err) {
+        appendTerminalLine(`> Error: ${err.message}`, "failed");
+        alert(`❌ Failed to start ChromaDB: ${err.message}`);
+      } finally {
+        elBtnStartChroma.disabled = false;
+        elBtnStartChroma.textContent = "⚡ Start";
+      }
+    });
+  }
+
+  // Index Markdown Files
+  if (elBtnIndexKb) {
+    elBtnIndexKb.addEventListener('click', async () => {
+      const chroma = elChromaEndpoint.value.trim();
+      
+      elBtnIndexKb.disabled = true;
+      elBtnIndexKb.textContent = "Indexing...";
+
+      try {
+        const res = await fetch('/api/kb/index', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chroma,
+            provider: elCopilotProvider.value,
+            model: elCopilotModel.value.trim(),
+            apiKey: elCopilotApiKey.value
+          })
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+          alert(`✅ Knowledge Base indexing completed successfully!\n\nCisco chunks indexed: ${data.cisco_count}\nPalo Alto chunks indexed: ${data.paloalto_count}\nDatabase mode: ${data.mode}`);
+        } else {
+          throw new Error(data.error || "Failed to index files.");
+        }
+      } catch (err) {
+        alert(`❌ Indexing failed: ${err.message}`);
+      } finally {
+        elBtnIndexKb.disabled = false;
+        elBtnIndexKb.textContent = "🔄 Index Markdown Files";
+      }
+    });
+  }
+
+  // Add Custom Chunk
+  if (elBtnAddChunk) {
+    elBtnAddChunk.addEventListener('click', async () => {
+      const chroma = elChromaEndpoint.value.trim();
+      const kb = elKbSelector.value;
+      const content = elCustomChunkContent.value.trim();
+
+      if (!content) {
+        alert("Please paste text content into the chunk area.");
+        return;
+      }
+
+      elBtnAddChunk.disabled = true;
+      elBtnAddChunk.textContent = "Adding...";
+
+      try {
+        const res = await fetch('/api/kb/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chroma,
+            kb,
+            content,
+            provider: elCopilotProvider.value,
+            model: elCopilotModel.value.trim(),
+            apiKey: elCopilotApiKey.value
+          })
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+          alert("✅ Custom chunk inserted into RAG database successfully!");
+          elCustomChunkContent.value = '';
+        } else {
+          throw new Error(data.error || "Failed to insert custom chunk.");
+        }
+      } catch (err) {
+        alert(`❌ Insert failed: ${err.message}`);
+      } finally {
+        elBtnAddChunk.disabled = false;
+        elBtnAddChunk.textContent = "+ Insert Chunk";
+      }
+    });
+  }
+
+  // Append a message bubble to the Chat window
+  function appendChatMessage(sender, text, hasCode = false, targetFile = '') {
+    const wrapper = document.createElement('div');
+    wrapper.className = `chat-message ${sender}`;
+
+    const bubble = document.createElement('div');
+    bubble.className = 'chat-bubble';
+
+    // Parse Markdown code blocks simply
+    if (sender === 'assistant') {
+      // Find code blocks inside ```
+      const parts = text.split(/(```[\s\S]*?```)/g);
+      parts.forEach(part => {
+        if (part.startsWith('```')) {
+          const match = part.match(/```(\w+)?\n([\s\S]*?)```/);
+          const lang = match ? match[1] || 'text' : 'text';
+          const code = match ? match[2] : part.slice(3, -3);
+
+          const pre = document.createElement('pre');
+          const codeEl = document.createElement('code');
+          codeEl.className = `language-${lang}`;
+          codeEl.textContent = code;
+          pre.appendChild(codeEl);
+          bubble.appendChild(pre);
+
+          // Render copy and apply actions
+          const actions = document.createElement('div');
+          actions.className = 'chat-code-actions';
+
+          // Copy Button
+          const btnCopy = document.createElement('button');
+          btnCopy.className = 'btn-chat-action';
+          btnCopy.innerHTML = '📋 Copy';
+          btnCopy.addEventListener('click', () => {
+            navigator.clipboard.writeText(code);
+            btnCopy.innerHTML = '✅ Copied!';
+            setTimeout(() => { btnCopy.innerHTML = '📋 Copy'; }, 2000);
+          });
+          actions.appendChild(btnCopy);
+
+          // Apply to Playbook Button
+          const btnApply = document.createElement('button');
+          btnApply.className = 'btn-chat-action apply';
+          btnApply.innerHTML = '💾 Apply Config';
+          
+          let resolvedFile = targetFile;
+          if (!resolvedFile) {
+            resolvedFile = elKbSelector.value === 'cisco' ? 'deploy_nexus.yml' : 'deploy_palo_alto.yml';
+          }
+
+          btnApply.addEventListener('click', async () => {
+            btnApply.disabled = true;
+            btnApply.innerHTML = 'Applying...';
+            try {
+              const res = await fetch('/api/copilot/apply', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ file: resolvedFile, code })
+              });
+              const data = await res.json();
+              if (res.ok) {
+                alert(`✅ Applied successfully to: ${resolvedFile}`);
+                updateConfigPreviews();
+              } else {
+                throw new Error(data.error || "Validation failed.");
+              }
+            } catch (err) {
+              alert(`❌ Apply failed: ${err.message}`);
+            } finally {
+              btnApply.disabled = false;
+              btnApply.innerHTML = '💾 Apply Config';
+            }
+          });
+          actions.appendChild(btnApply);
+          bubble.appendChild(actions);
+        } else {
+          const textSpan = document.createElement('span');
+          textSpan.innerHTML = part.replace(/\n/g, '<br>');
+          bubble.appendChild(textSpan);
+        }
+      });
+    } else {
+      bubble.textContent = text;
+    }
+
+    wrapper.appendChild(bubble);
+    elChatWindow.appendChild(wrapper);
+    elChatWindow.scrollTop = elChatWindow.scrollHeight;
+  }
+
+  // Send Chat message routine
+  async function sendChatMessage() {
+    const prompt = elCopilotInput.value.trim();
+    if (!prompt) return;
+
+    appendChatMessage('user', prompt);
+    elCopilotInput.value = '';
+
+    // Create loader bubble
+    const loaderWrapper = document.createElement('div');
+    loaderWrapper.className = 'chat-message assistant';
+    loaderWrapper.id = 'chatLoaderBubble';
+    
+    const loaderBubble = document.createElement('div');
+    loaderBubble.className = 'chat-bubble';
+    loaderBubble.innerHTML = `<div class="chat-loading"><span></span><span></span><span></span></div>`;
+    loaderWrapper.appendChild(loaderBubble);
+    elChatWindow.appendChild(loaderWrapper);
+    elChatWindow.scrollTop = elChatWindow.scrollHeight;
+
+    // RAG Context retrieval
+    let ragContext = "";
+    if (elChatUseRag.checked) {
+      try {
+        const chroma = elChromaEndpoint.value.trim();
+        const kb = elKbSelector.value;
+        const res = await fetch('/api/kb/query', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chroma,
+            kb,
+            query: prompt,
+            provider: elCopilotProvider.value,
+            model: elCopilotModel.value.trim(),
+            apiKey: elCopilotApiKey.value
+          })
+        });
+        const data = await res.json();
+        
+        if (res.ok && data.results && data.results.length > 0) {
+          ragContext = data.results.map(r => r.content).join("\n\n");
+          elRagContextPreview.style.display = 'block';
+          elRagContextPreview.textContent = `📚 RAG Match: Found ${data.results.length} snippets in ${kb.toUpperCase()} KB. Injecting context...`;
+        } else {
+          elRagContextPreview.style.display = 'none';
+        }
+      } catch (err) {
+        console.error("RAG context query failure:", err);
+      }
+    } else {
+      elRagContextPreview.style.display = 'none';
+    }
+
+    // Sync GUI context details
+    let guiContext = "";
+    if (elChatIncludeGui.checked) {
+      guiContext = JSON.stringify(state, null, 2);
+    }
+
+    // Sync Server files details
+    let filesContext = "";
+    if (elChatIncludeFiles.checked) {
+      try {
+        filesContext = JSON.stringify({
+          network_config: elYamlContent.textContent,
+          inventory_ini: elIniContent.textContent,
+          palo_alto_config: elPaloYamlContent.textContent
+        });
+      } catch (err) {
+        console.error("Files context read failure:", err);
+      }
+    }
+
+    // Call Copilot Chat endpoint
+    try {
+      const payload = {
+        provider: elCopilotProvider.value,
+        model: elCopilotModel.value.trim(),
+        apiKey: elCopilotApiKey.value,
+        prompt,
+        ragContext,
+        guiContext,
+        filesContext
+      };
+
+      const res = await fetch('/api/copilot/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      
+      // Remove loader
+      const loader = document.getElementById('chatLoaderBubble');
+      if (loader) loader.remove();
+
+      if (res.ok) {
+        let targetFile = elKbSelector.value === 'cisco' ? 'deploy_nexus.yml' : 'deploy_palo_alto.yml';
+        appendChatMessage('assistant', data.response, true, targetFile);
+      } else {
+        throw new Error(data.error || "Failed to get response from AI model.");
+      }
+    } catch (err) {
+      const loader = document.getElementById('chatLoaderBubble');
+      if (loader) loader.remove();
+      appendChatMessage('assistant', `❌ ERROR CALLING COPILOT: ${err.message}`);
+    }
+  }
+
+  if (elBtnSendChat && elCopilotInput) {
+    elBtnSendChat.addEventListener('click', sendChatMessage);
+    elCopilotInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') sendChatMessage();
+    });
+  }
+
+  // --- CONNECT AI DIAGNOSTIC TERMINAL ERROR ANALYZER ---
+  if (elBtnAnalyzeError) {
+    elBtnAnalyzeError.addEventListener('click', () => {
+      // Read last 25 lines from terminal console
+      const lines = Array.from(elTerminal.querySelectorAll('.line'));
+      const lastLinesText = lines.slice(-25).map(l => l.textContent).join('\n');
+
+      // Swap to copilot tab
+      deactivateAllTabs();
+      const copilotTabBtn = document.querySelector('[data-tab="copilot-tab"]');
+      if (copilotTabBtn) copilotTabBtn.classList.add('active');
+      document.getElementById('copilot-tab').classList.add('active');
+
+      // Set input prompt value and trigger send
+      elCopilotInput.value = `Explain why this playbook verification/run failed and suggest a fix. Here are the logs:\n\`\`\`text\n${lastLinesText}\n\`\`\``;
+      
+      // Auto-toggle file syncing context
+      elChatIncludeFiles.checked = true;
+      elChatIncludeGui.checked = true;
+
+      sendChatMessage();
+    });
+  }
+
+  // --- OVERRIDE CLEANUP DEPLOYMENT TO DISPLAY AI ERROR ANALYZER BUTTON ---
+  const originalCleanupDeployment = cleanupDeployment;
+  cleanupDeployment = function() {
+    originalCleanupDeployment();
+
+    // Check if the terminal contains failed lines
+    const textContent = elTerminal.textContent;
+    if (textContent.includes('failed=1') || textContent.includes('failed=') || textContent.includes('fatal:') || textContent.includes('failed:') || textContent.includes('FAILED') || textContent.includes('exit code:')) {
+      elBtnAnalyzeError.style.display = 'inline-flex';
+    } else {
+      elBtnAnalyzeError.style.display = 'none';
+    }
+  };
+
   init();
 });
+

@@ -109,5 +109,16 @@
       "ip_address": "10.10.10.1",
       "netmask": "255.255.255.0"
     }
-  ]
+  ],
+  "palo_alto": {
+    "device": {
+      "host": "",
+      "port": 443,
+      "username": "admin",
+      "password": "admin"
+    },
+    "address_objects": [],
+    "service_objects": [],
+    "security_policies": []
+  }
 }

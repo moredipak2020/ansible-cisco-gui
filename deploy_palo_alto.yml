@@ -1,0 +1,62 @@
+---
+- name: Automate Palo Alto Networks Firewall Policy
+  hosts: localhost
+  gather_facts: no
+  vars_files:
+    - vars/palo_alto_config.yml
+
+  tasks:
+    - name: 1. Provision Address Objects
+      paloaltonetworks.panos.panos_address_object:
+        provider:
+          ip_address: "{{ palo_alto_device.host }}"
+          username: "{{ palo_alto_device.username }}"
+          password: "{{ palo_alto_device.password }}"
+          port: "{{ palo_alto_device.port | default(443) }}"
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        address_type: "{{ item.type }}"
+        state: present
+      loop: "{{ address_objects }}"
+      when: address_objects is defined and address_objects | length > 0
+
+    - name: 2. Provision Service Objects
+      paloaltonetworks.panos.panos_service_object:
+        provider:
+          ip_address: "{{ palo_alto_device.host }}"
+          username: "{{ palo_alto_device.username }}"
+          password: "{{ palo_alto_device.password }}"
+          port: "{{ palo_alto_device.port | default(443) }}"
+        name: "{{ item.name }}"
+        protocol: "{{ item.protocol }}"
+        destination_port: "{{ item.port }}"
+        state: present
+      loop: "{{ service_objects }}"
+      when: service_objects is defined and service_objects | length > 0
+
+    - name: 3. Provision Security Access Policies
+      paloaltonetworks.panos.panos_security_rule:
+        provider:
+          ip_address: "{{ palo_alto_device.host }}"
+          username: "{{ palo_alto_device.username }}"
+          password: "{{ palo_alto_device.password }}"
+          port: "{{ palo_alto_device.port | default(443) }}"
+        rule_name: "{{ item.rule_name | default(item.name) }}"
+        source_zone: ["{{ item.from_zone }}"]
+        destination_zone: ["{{ item.to_zone }}"]
+        source_ip: ["{{ item.source }}"]
+        destination_ip: ["{{ item.destination }}"]
+        service: ["{{ item.service }}"]
+        action: "{{ item.action }}"
+        state: present
+      loop: "{{ security_rules }}"
+      when: security_rules is defined and security_rules | length > 0
+
+    - name: 4. Commit Configuration Changes
+      paloaltonetworks.panos.panos_commit:
+        provider:
+          ip_address: "{{ palo_alto_device.host }}"
+          username: "{{ palo_alto_device.username }}"
+          password: "{{ palo_alto_device.password }}"
+          port: "{{ palo_alto_device.port | default(443) }}"
+      when: (address_objects is defined and address_objects | length > 0) or (service_objects is defined and service_objects | length > 0) or (security_rules is defined and security_rules | length > 0)
