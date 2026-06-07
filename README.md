@@ -8,7 +8,10 @@ The console integrates a modern, real-time GUI frontend with an Ansible automati
 
 ## 🏛️ Architecture & System Integration
 
-The following diagram illustrates how the client dashboard, Node.js API server, local RAG/LLM backend, Ansible control node, and target network infrastructure are integrated:
+The following diagram illustrates how the client dashboard, Node.js API server, local RAG/LLM backend, Ansible control node, and target network infrastructure are integrated.
+
+> [!TIP]
+> **[🔍 Open Diagram in New Tab for Panning & Zooming](./architecture.svg)** — Click to open the high-resolution vector image in a new tab to zoom, pan, or inspect connections clearly.
 
 ```mermaid
 graph TD
