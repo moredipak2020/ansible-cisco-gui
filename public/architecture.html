@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FabricOrchestra - System Architecture</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-primary: #060814;
+      --bg-secondary: #0b0f19;
+      --bg-card: rgba(15, 23, 42, 0.45);
+      --bg-input: #020617;
+      --border-color: rgba(255, 255, 255, 0.05);
+      --border-focus: #38bdf8;
+      --text-main: #f8fafc;
+      --text-muted: #64748b;
+      --primary: #38bdf8;
+      --primary-glow: rgba(56, 189, 248, 0.2);
+      --success: #10b981;
+      --font-sans: 'Outfit', sans-serif;
+      --font-mono: 'Fira Code', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-primary);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.08) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.05) 0px, transparent 50%);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 2rem;
+      background: rgba(11, 15, 25, 0.8);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      z-index: 10;
+    }
+
+    .logo-area {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-orb {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary), var(--success));
+      box-shadow: 0 0 12px var(--primary-glow);
+      animation: pulse 3s infinite alternate;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); box-shadow: 0 0 8px var(--primary-glow); }
+      100% { transform: scale(1.1); box-shadow: 0 0 16px var(--primary-glow); }
+    }
+
+    .title-wrap h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(to right, #ffffff, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .title-wrap p {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    button, .btn-link {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+      text-decoration: none;
+      font-family: var(--font-sans);
+    }
+
+    button:hover, .btn-link:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.15);
+      color: var(--primary);
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.1);
+    }
+
+    button:active, .btn-link:active {
+      transform: scale(0.98);
+    }
+
+    .main-viewport {
+      flex: 1;
+      position: relative;
+      background: #060814;
+      background-image: 
+        radial-gradient(rgba(56, 189, 248, 0.15) 1px, transparent 1px), 
+        radial-gradient(rgba(56, 189, 248, 0.08) 1px, transparent 1px);
+      background-size: 24px 24px;
+      background-position: 0 0, 12px 12px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #diagram-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: grab;
+      user-select: none;
+    }
+
+    #diagram-container:active {
+      cursor: grabbing;
+    }
+
+    /* Mermaid nodes custom styling overrides */
+    .mermaid {
+      visibility: hidden;
+      position: absolute;
+    }
+
+    /* Rendered SVG wrapper to apply zoom/pan */
+    #svg-wrapper {
+      transform-origin: 0 0;
+      transition: transform 0.05s ease-out;
+      will-change: transform;
+    }
+
+    .floating-controls {
+      position: absolute;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 8px 16px;
+      border-radius: 30px;
+      display: flex;
+      gap: 12px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+      z-index: 5;
+    }
+
+    .control-divider {
+      width: 1px;
+      background: rgba(255, 255, 255, 0.08);
+      margin: 4px 0;
+    }
+
+    .floating-controls button {
+      background: transparent;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      color: var(--text-main);
+    }
+
+    .floating-controls button:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--primary);
+      box-shadow: none;
+    }
+
+    .toast {
+      position: absolute;
+      top: 5rem;
+      right: 2rem;
+      background: rgba(16, 185, 129, 0.9);
+      color: white;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: all 0.3s ease;
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Modal for Mermaid Code */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+      z-index: 200;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      width: 90%;
+      max-width: 700px;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5);
+      transform: translateY(20px);
+      transition: transform 0.3s ease;
+    }
+
+    .modal-overlay.active .modal-card {
+      transform: translateY(0);
+    }
+
+    .modal-header {
+      padding: 1.25rem;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-header h3 {
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+
+    .modal-body {
+      padding: 1.25rem;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .modal-body pre {
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      padding: 1rem;
+      border-radius: 8px;
+      color: #38bdf8;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      white-space: pre-wrap;
+      user-select: all;
+    }
+
+    .modal-footer {
+      padding: 1.25rem;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+  </style>
+
+  <!-- Load Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo-area">
+      <div class="logo-orb"></div>
+      <div class="title-wrap">
+        <h1>FabricOrchestra System Integration</h1>
+        <p>Interactive Architectural Diagram Viewer</p>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="btnShowCode">📋 View Mermaid Syntax</button>
+      <a href="/" class="btn-link">🔌 Back to Console</a>
+    </div>
+  </header>
+
+  <!-- MAIN VIEWPORT -->
+  <div class="main-viewport">
+    <div id="diagram-container">
+      <div id="svg-wrapper">
+        <!-- RENDERED DIAGRAM WILL INJECT HERE -->
+      </div>
+    </div>
+
+    <!-- FLOATING CONTROLS -->
+    <div class="floating-controls">
+      <button id="btnZoomIn" title="Zoom In">➕ Zoom In</button>
+      <button id="btnZoomOut" title="Zoom Out">➖ Zoom Out</button>
+      <button id="btnReset" title="Reset Zoom & Pan">🔄 Reset</button>
+      <div class="control-divider"></div>
+      <button id="btnDownloadSVG" title="Download SVG Vector Graphic">📥 Export SVG</button>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div class="toast" id="toast">Copied to clipboard!</div>
+
+  <!-- MERMAID SYNTAX SOURCE MODAL -->
+  <div class="modal-overlay" id="codeModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Mermaid Syntax Code</h3>
+        <button id="btnCloseModal" style="padding: 4px 8px; font-size: 0.8rem;">✕</button>
+      </div>
+      <div class="modal-body">
+        <pre id="mermaidCodeContainer"></pre>
+      </div>
+      <div class="modal-footer">
+        <button id="btnCopyCode" class="success">📋 Copy Code</button>
+        <button id="btnCloseModalFooter">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Raw Mermaid Source for Parsing -->
+  <div class="mermaid" id="raw-mermaid-src">
+graph TD
+    %% Frontend / Client
+    subgraph Client ["Client Browser (FabricOrchestra Dashboard)"]
+        UI["HTML5 / Vanilla CSS3 / JS Console"]
+        Terminal["Orchestration Stream Logger (SSE)"]
+        Copilot["RAG Copilot Chat Interface"]
+        PDF["AI PDF Drag-and-Drop Ingestor"]
+    end
+
+    %% Node.js Backend
+    subgraph Backend ["Node.js Express API Server (port 3000)"]
+        Router["Express App Router"]
+        AST["AST Code Analyzer"]
+        Compiler["Ansible YAML/INI Variable Compiler"]
+        SSH["SSH2 Client SSH Tunneling Engine"]
+        LocalDB["Local File DB (database/db.json)"]
+        RAGRouter["RAG Vector Router / Keyword Sync"]
+        AuditEngine["Security Policy & NAT Audit Analyzer"]
+    end
+
+    %% Vector Database & LLM
+    subgraph AI ["AI & Knowledge Base Stack"]
+        Chroma["ChromaDB Vector Store (port 8000)"]
+        Gemini["Google Gemini (API)"]
+        Ollama["Local Ollama (port 11434)"]
+        PDFParse["pdf-parse plain-text extractor"]
+    end
+
+    %% Ansible Control Node
+    subgraph ControlNode ["Ansible Automation Node (Local/Remote Host)"]
+        AnsibleEngine["Ansible Core Orchestrator"]
+        CiscoPlaybook["deploy_nexus.yml (Cisco vxlan/vPC/HSRP)"]
+        PaloPlaybook["deploy_palo_alto.yml (Palo Alto Policies/NAT)"]
+        Vars["vars/network_config.yml & vars/palo_alto_config.yml"]
+    end
+
+    %% Network Infrastructure
+    subgraph Network ["Target Enterprise Infrastructure"]
+        CiscoNX["Cisco Nexus Switches (Leaf/Spine Fabric)"]
+        CiscoIOS["Downstream L3 Switches / Port-Channels"]
+        PaloFW["Palo Alto Firewalls (Standalone / HA Pairs)"]
+    end
+
+    %% Client -> Backend
+    UI -->|"JSON Config Updates"| Router
+    UI -->|"Run Simulation / Deploy"| Router
+    Router ==>|"Server-Sent Events (SSE) logs"| Terminal
+    Copilot -->|"Chat query / Provider configs"| RAGRouter
+    PDF -->|"Upload PDF Buffer"| Router
+    
+    %% Backend internal and external integrations
+    Router -->|"Read/Write state"| LocalDB
+    Router -->|"Compile configuration vars"| Compiler
+    Router -->|"Post configuration payload"| AuditEngine
+    Router -->|"Initiate SSH Deployments"| SSH
+    Router -->|"Extract PDF text"| PDFParse
+    Router -->|"Route RAG indexing/search"| RAGRouter
+    
+    %% RAG & AI integrations
+    PDFParse -->|"Clean Markdown Chunks"| RAGRouter
+    RAGRouter -->|"Create collections, Add documents, Query"| Chroma
+    RAGRouter -->|"Generate embeddings & Chat prompts"| Gemini
+    RAGRouter -->|"Generate embeddings & Chat prompts"| Ollama
+    
+    %% Backend -> Control Node
+    SSH ==>|"Transfer playbooks, vars, inventory & run playbook"| AnsibleEngine
+    Compiler -->|"Writes vars & inventory"| Vars
+    
+    %% Control Node -> Targets
+    AnsibleEngine -->|"Provision fabric via SSH/Netconf"| CiscoNX
+    AnsibleEngine -->|"Provision aggregates"| CiscoIOS
+    AnsibleEngine -->|"Configure security & NAT policies"| PaloFW
+  </div>
+
+  <script>
+    // Initialize Mermaid with a custom dark theme
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      themeVariables: {
+        background: '#060814',
+        primaryColor: '#0f172a',
+        primaryTextColor: '#f8fafc',
+        primaryBorderColor: 'rgba(56, 189, 248, 0.4)',
+        lineColor: '#38bdf8',
+        secondaryColor: '#0b0f19',
+        tertiaryColor: '#1e293b'
+      }
+    });
+
+    const rawCode = document.getElementById('raw-mermaid-src').textContent.trim();
+    document.getElementById('mermaidCodeContainer').textContent = rawCode;
+
+    const wrapper = document.getElementById('svg-wrapper');
+    const container = document.getElementById('diagram-container');
+
+    // Render diagram
+    mermaid.render('rendered-diagram', rawCode).then(({ svg }) => {
+      wrapper.innerHTML = svg;
+      
+      const svgEl = wrapper.querySelector('svg');
+      if (svgEl) {
+        // Reset hardcoded width constraints to let css scale properly
+        svgEl.style.width = '100%';
+        svgEl.style.height = '100%';
+        svgEl.style.maxWidth = 'none';
+        
+        // Initial auto-centering/scaling calculations
+        resetZoomAndPan();
+      }
+    }).catch(err => {
+      console.error("Mermaid Render Error:", err);
+      wrapper.innerHTML = `<div style="color: #f43f5e; padding: 2rem; font-weight: 600;">Failed to render Mermaid diagram. Please verify syntax.</div>`;
+    });
+
+    // Zoom & Pan State
+    let zoom = 0.85;
+    let panX = 0;
+    let panY = 0;
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+
+    function updateTransform() {
+      // Apply translate and scale to wrapper
+      wrapper.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+    }
+
+    function resetZoomAndPan() {
+      const containerRect = container.getBoundingClientRect();
+      const wrapperRect = wrapper.getBoundingClientRect();
+      
+      // Reset defaults
+      zoom = 0.8;
+      
+      // Center SVG wrapper inside viewport
+      panX = (containerRect.width - (wrapperRect.width * zoom)) / 2;
+      panY = (containerRect.height - (wrapperRect.height * zoom)) / 2;
+      
+      // Compensate for bounds checking offset if necessary
+      if (isNaN(panX)) panX = 40;
+      if (isNaN(panY)) panY = 40;
+      
+      updateTransform();
+    }
+
+    // Event Listeners for dragging/panning
+    container.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return; // Left click only
+      isDragging = true;
+      startX = e.clientX - panX;
+      startY = e.clientY - panY;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      panX = e.clientX - startX;
+      panY = e.clientY - startY;
+      updateTransform();
+    });
+
+    window.addEventListener('mouseup', () => {
+      isDragging = false;
+    });
+
+    // Wheel zooming
+    container.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      
+      const zoomFactor = 1.08;
+      const mouseX = e.clientX - container.offsetLeft;
+      const mouseY = e.clientY - container.offsetTop;
+      
+      // Calculate next zoom level
+      let nextZoom;
+      if (e.deltaY < 0) {
+        nextZoom = Math.min(zoom * zoomFactor, 4);
+      } else {
+        nextZoom = Math.max(zoom / zoomFactor, 0.15);
+      }
+      
+      // Zoom centered on mouse pointer
+      panX = mouseX - (mouseX - panX) * (nextZoom / zoom);
+      panY = mouseY - (mouseY - panY) * (nextZoom / zoom);
+      zoom = nextZoom;
+      
+      updateTransform();
+    }, { passive: false });
+
+    // Touch support
+    let touchStartDist = 0;
+    container.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        isDragging = true;
+        startX = e.touches[0].clientX - panX;
+        startY = e.touches[0].clientY - panY;
+      } else if (e.touches.length === 2) {
+        isDragging = false;
+        touchStartDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+      }
+    });
+
+    container.addEventListener('touchmove', (e) => {
+      if (isDragging && e.touches.length === 1) {
+        panX = e.touches[0].clientX - startX;
+        panY = e.touches[0].clientY - startY;
+        updateTransform();
+      } else if (e.touches.length === 2) {
+        const dist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        const factor = dist / touchStartDist;
+        zoom = Math.max(0.15, Math.min(zoom * factor, 4));
+        touchStartDist = dist;
+        updateTransform();
+      }
+    });
+
+    container.addEventListener('touchend', () => {
+      isDragging = false;
+    });
+
+    // Controls Action Binding
+    document.getElementById('btnZoomIn').addEventListener('click', () => {
+      zoom = Math.min(zoom * 1.2, 4);
+      updateTransform();
+    });
+
+    document.getElementById('btnZoomOut').addEventListener('click', () => {
+      zoom = Math.max(zoom / 1.2, 0.15);
+      updateTransform();
+    });
+
+    document.getElementById('btnReset').addEventListener('click', () => {
+      resetZoomAndPan();
+    });
+
+    // Code Modal Interactions
+    const codeModal = document.getElementById('codeModal');
+    document.getElementById('btnShowCode').addEventListener('click', () => {
+      codeModal.classList.add('active');
+    });
+
+    const closeModal = () => codeModal.classList.remove('active');
+    document.getElementById('btnCloseModal').addEventListener('click', closeModal);
+    document.getElementById('btnCloseModalFooter').addEventListener('click', closeModal);
+    codeModal.addEventListener('click', (e) => {
+      if (e.target === codeModal) closeModal();
+    });
+
+    // Toast Alert Helper
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 2000);
+    }
+
+    // Copy Mermaid Code Action
+    document.getElementById('btnCopyCode').addEventListener('click', () => {
+      navigator.clipboard.writeText(rawCode).then(() => {
+        showToast("Copied to clipboard!");
+        closeModal();
+      }).catch(err => {
+        console.error("Copy failed:", err);
+      });
+    });
+
+    // Export SVG Action
+    document.getElementById('btnDownloadSVG').addEventListener('click', () => {
+      const svgEl = wrapper.querySelector('svg');
+      if (!svgEl) return;
+      
+      try {
+        const serializer = new XMLSerializer();
+        let source = serializer.serializeToString(svgEl);
+        
+        // Add XML declaration if not exists
+        if (!source.match(/^<svg[^>]+xmlns="http\/\/www\.w3\.org\/2000\/svg"/)) {
+          source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+        }
+        if (!source.match(/^<\?xml/)) {
+          source = '<?xml version="1.0" standalone="no"?>\r\n' + source;
+        }
+        
+        const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(source);
+        const downloadLink = document.createElement("a");
+        downloadLink.href = url;
+        downloadLink.download = "fabric_orchestra_system_architecture.svg";
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+        showToast("SVG exported successfully!");
+      } catch (err) {
+        console.error("SVG export failed:", err);
+        showToast("Export failed!");
+      }
+    });
+  </script>
+</body>
+</html>
