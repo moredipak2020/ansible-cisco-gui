@@ -91,41 +91,47 @@ To ensure security and operations separation, the management plane is split:
     *   **Bronze**: Max rate-limit 1 Gbps, low-priority queuing.
 
 ### 2. Cisco ACI Underlay Fabric (Nexus switches)
-*   **Tenant L3Out Leaves**: Peer with Cisco ASRs over dynamic routing protocols to advertise datacenter prefixes and learn WAN routes.
-*   **Underlay Transport**: Fully managed ACI VXLAN fabric. It treats VM traffic (ESXi hypervisors) as simple VLAN tag payloads, delivering packets transparently to physical nodes.
-*   **Mainframe Leaves**: Connect directly to mainframe channels (e.g., FICON / OSA adapters) on dedicated vlan segments.
+*   **Role**: Operates strictly as a **transparent Layer 2 Transit Underlay** (no Layer 3 routing terminates on ACI).
+*   **Transit VLANs**: ACI Leaf switches use simple VLAN EPGs to bridge traffic between the physical Cisco ASR WAN interface and the physical NSX Edge uplink interfaces.
+*   **Jumbo MTU Underlay**: Fabric interfaces are configured with a **Jumbo MTU (9000 bytes)** to carry encapsulated Geneve/VXLAN overlay packets (which carry a 50-byte header overhead) without packet fragmentation.
+*   **Mainframe VLAN**: Provides L2 connectivity between the physical mainframe OSA/RoCE adapters and the logical NSX Tier-0/Tier-1 virtual interfaces.
 
 ### 3. VMware NSX Overlay Objects
-*   **Logical Switches (NSX Segments)**: Layer 2 overlay segments configured on ESXi host clusters. Traffic encapsulates in Geneve/VXLAN overlay packets at the ESXi host level, passing through the provider ACI fabric without ACI needing to configure host-specific configurations.
-*   **Distributed Firewall (NSXFW)**: Applies stateful inspection policies. Ensures client tiers are separated (e.g., Gold segment cannot talk to Bronze segment directly unless explicitly authorized).
-*   **NSX Load Balancer (NSXLB)**: Distributes high-throughput sessions to backend application interfaces routing to the mainframe.
+*   **Tier-0 Gateway Router**: Establishes **direct BGP peering with the Cisco ASR WAN Router** over the ACI L2 Transit VLAN. It handles all external WAN routing advertisements.
+*   **Tier-1 Gateway Router**: Handles internal routing for client segments and provides default gateways for client and mainframe zones.
+*   **Logical Switches (NSX Segments)**: Geneve-encapsulated L2 segments. Client and Mainframe traffic is routed directly at the hypervisor/edge host level.
+*   **Distributed Firewall (NSXFW)**: Applies security micro-segmentation directly at the VM vNIC level.
+*   **NSX Load Balancer (NSXLB)**: Manages load-balanced traffic pools for mainframe services.
 
 ---
 
-## 🔄 End-to-End VRF & Tenant Traffic Walk
+## 🔄 End-to-End Transparent Underlay Traffic Walk
 
-Traffic is isolated end-to-end using dedicated Client VRFs and ACI Tenant EPGs before entering the Mainframe zone:
+Traffic flows from the client to the mainframe, routing entirely through NSX gateways while ACI bridges the frames transparently:
 
 ```
 [Client Machine]
       │
-      ▼ (L2/L3 frame sent to ASR)
+      ▼ (Sends traffic to WAN Gateway)
 [Cisco ASR WAN Router] ───► Mapped to [Client-Specific VRF]
       │
-      ▼ (L3 Transit routed under the same VRF)
-[Core Nexus Switch]
+      ▼ (BGP Peered Directly to NSX Edge Interface)
+[ACI L2 Transit VLAN] ───► (ACI Leaf/Spine underlay bridges packet transparently)
       │
-      ▼ (Routed to Tenant L3Out EPG)
-[ACI Client-Specific Tenant]
+      ▼ (L3 Routing boundary)
+[NSX Tier-0 Gateway]
       │
-      ▼ (ACI Spines transit packet directly to endpoint hosts)
-[Mainframe / Endpoint Servers]
+      ▼ (Secured by NSX Firewall Policies)
+[NSX Distributed Firewall (NSXFW)]
       │
-      ▼ (Encapsulated into hypervisor overlay)
-[NSX Segment & Firewall (NSXFW)] ───► (Passed to NSX Load Balancer VIP)
+      ▼ (Routed to virtual load-balancer VIP)
+[NSX Load Balancer (NSXLB)]
+      │
+      ▼ (Forwarded to physical mainframe over mainframe VLAN segment)
+[ACI Mainframe VLAN] ───► (ACI Leaf bridges packet to physical adapter)
       │
       ▼
-[Mainframe CPU Processing Node]
+[Mainframe System]
 ```
 
 ---
