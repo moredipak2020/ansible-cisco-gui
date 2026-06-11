@@ -19,6 +19,9 @@ The system architecture decouples physical hardware provisioning from virtual ne
 
 The following diagram illustrates the path from the WAN edge, through the ACI fabric underlay, up to the NSX overlay virtual security structures, and finally to the client and mainframe endpoints:
 
+![Enterprise Network System Architecture](file:///C:/Users/mored/.gemini/antigravity/brain/0b9e22c9-f1f3-44ae-a5ad-70c6f8728763/system_architecture_diagram_1781199774002.png)
+
+
 ```mermaid
 graph TD
     %% WAN Edge
